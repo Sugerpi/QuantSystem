@@ -26,5 +26,17 @@ def test_empty_prices_has_schema():
 
 
 def test_fake_satisfies_protocol():
-    p: DataProvider = _FakeProvider()
+    p = _FakeProvider()
+    assert isinstance(p, DataProvider)
     assert isinstance(p.fetch_metadata(["SPY"]), dict)
+
+
+def test_incomplete_provider_fails_protocol():
+    class _Broken:  # 缺 fetch_series
+        def fetch_prices(self, tickers, start, end):
+            return empty_prices()
+
+        def fetch_metadata(self, tickers):
+            return {}
+
+    assert not isinstance(_Broken(), DataProvider)
