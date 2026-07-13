@@ -1,3 +1,6 @@
+# --- Claude Code 本地個人設定（不進共享版控） ---
+.claude/settings.local.json
+
 # --- QuantCore 專案特定 ---
 # 資料快照本體 gitignore，MANIFEST.json 的 hash 另外進版控（見規格 §4.2）
 snapshots/*
