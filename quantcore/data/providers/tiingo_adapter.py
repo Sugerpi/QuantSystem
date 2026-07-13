@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 import pandas as pd
@@ -13,6 +14,11 @@ from quantcore.data.provider import PRICE_COLUMNS, empty_prices
 from quantcore.data.secrets import get_secret
 
 _BASE = "https://api.tiingo.com/tiingo/daily/{ticker}/prices"
+
+
+def _redact_token(text: str) -> str:
+    """遮蔽任何 token=… 查詢參數，避免 API key 出現在錯誤訊息/log。"""
+    return re.sub(r"token=[^&\s]+", "token=***", text)
 
 
 def normalize_tiingo(payload: list[dict], ticker: str) -> pd.DataFrame:
@@ -47,17 +53,20 @@ class TiingoAdapter:
 
         frames = []
         for t in tickers:
-            resp = requests.get(
-                _BASE.format(ticker=t),
-                params={
-                    "startDate": str(start),
-                    "endDate": str(end),
-                    "format": "json",
-                    "token": self._api_key,
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
+            try:
+                resp = requests.get(
+                    _BASE.format(ticker=t),
+                    params={
+                        "startDate": str(start),
+                        "endDate": str(end),
+                        "format": "json",
+                        "token": self._api_key,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+            except requests.RequestException as exc:
+                raise RuntimeError(f"Tiingo 請求失敗（{t}）：{_redact_token(str(exc))}") from None
             frames.append(normalize_tiingo(resp.json(), t))
         return pd.concat(frames, ignore_index=True) if frames else empty_prices()
 

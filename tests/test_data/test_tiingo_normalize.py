@@ -23,3 +23,16 @@ def test_normalize_empty_payload():
     tidy = normalize_tiingo([], "SPY")
     assert list(tidy.columns) == PRICE_COLUMNS
     assert tidy.empty
+
+
+def test_redact_token_removes_key():
+    from quantcore.data.providers.tiingo_adapter import _redact_token
+
+    msg = (
+        "401 Client Error: Unauthorized for url: "
+        "https://api.tiingo.com/tiingo/daily/SPY/prices"
+        "?startDate=2020-01-01&token=SECRETKEY123&format=json"
+    )
+    red = _redact_token(msg)
+    assert "SECRETKEY123" not in red
+    assert "token=***" in red
