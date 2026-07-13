@@ -73,6 +73,17 @@ class CostsConfig(_Strict):
     per_side_bps: float = Field(ge=0)
 
 
+class DataQualityConfig(_Strict):
+    """資料品質門檻（設計文件 §7a、規格 §4.3/§4.5）。"""
+
+    discrepancy_bps: float = Field(gt=0)  # §4.5 跨源日報酬差異門檻
+    window_days: int = Field(gt=0)  # §4.5 滾動窗（交易日）
+    window_max_hits: int = Field(gt=0)  # §4.5 窗內差異筆數上限（達到即失敗）
+    extreme_return: float = Field(gt=0, lt=1)  # §4.3-2 單日 |r| 極端值門檻
+    max_consecutive_nan: int = Field(gt=0)  # §4.3-3 連續缺值上限（超過即拒絕）
+    total_return_tol_bps: float = Field(gt=0)  # §4.3-1 總報酬抽查容差
+
+
 class BacktestConfig(_Strict):
     """回測範圍（規格 §6）。"""
 
@@ -89,6 +100,7 @@ class QuantConfig(_Strict):
     risk: RiskConfig
     schedule: ScheduleConfig
     costs: CostsConfig
+    data_quality: DataQualityConfig
     backtest: BacktestConfig
 
     @model_validator(mode="after")

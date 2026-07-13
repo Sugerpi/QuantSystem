@@ -28,5 +28,13 @@ schedule:                           # §1.7 再平衡時程
 costs:                              # §1.8 交易成本
   per_side_bps: 5
 
+data_quality:                       # §4.3 / §4.5 資料品質門檻
+  discrepancy_bps: 50               # 跨源日報酬差異門檻（bps）
+  window_days: 30                   # 滾動窗（交易日）
+  window_max_hits: 3                # 窗內差異達此筆數即快照失敗
+  extreme_return: 0.20              # 單日 |r| 極端值門檻
+  max_consecutive_nan: 5            # 連續缺值超過即拒絕
+  total_return_tol_bps: 10          # 總報酬抽查容差（bps）
+
 backtest:
   start: 2005-01-03                 # §1.1 建議起點
