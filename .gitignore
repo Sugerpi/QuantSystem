@@ -1,0 +1,50 @@
+# --- QuantCore 專案特定 ---
+# 資料快照本體 gitignore，MANIFEST.json 的 hash 另外進版控（見規格 §4.2）
+snapshots/*
+!snapshots/.gitkeep
+# 實驗輸出（見規格 §2.1 / §7.1）
+runs/*
+!runs/.gitkeep
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+
+# 虛擬環境
+.venv/
+venv/
+env/
+ENV/
+
+# 測試 / 覆蓋率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- 資料檔（避免誤入版控，快照以外的 parquet/csv） ---
+*.parquet
+*.pkl
+*.pickle
