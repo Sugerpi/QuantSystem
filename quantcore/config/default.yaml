@@ -1,0 +1,32 @@
+# QuantCore 預設參數（規格 §7.2）
+# 全系統唯一的參數來源。修改前先確認對應規格章節。
+
+snapshot: snapshots/PLACEHOLDER      # Phase 1 建立快照後填入實際目錄
+seed: 42
+
+universe:                            # §1.1 資產選單（v1 預設約 22 檔）
+  menu: [SPY, QQQ, IWM, XLK, XLF, XLE, XLV, XLI, XLP, XLU, XLY, XLB,
+         EFA, EEM, TLT, IEF, LQD, HYG, GLD, DBC, VNQ]
+  min_history_days: 252             # §1.1 inception + 252 交易日才進選單
+
+signal:                             # §1.3 橫斷面 12-1 動量
+  momentum_lookback: 252
+  momentum_skip: 21
+  top_k: 5
+
+risk:                               # §1.6 / §5
+  vol_model: garch_arch             # garch_arch | garch_own | ewma
+  corr_model: dcc                   # dcc | ewma
+  vol_target_annual: 0.10           # σ* 年化波動目標
+  exposure_band: 0.10               # 曝險更新帶
+  exposure_min: 0.10                # E_min
+
+schedule:                           # §1.7 再平衡時程
+  selection_interval: 21
+  exposure_check_interval: 5
+
+costs:                              # §1.8 交易成本
+  per_side_bps: 5
+
+backtest:
+  start: 2005-01-03                 # §1.1 建議起點

@@ -13,7 +13,7 @@
 
 | Phase | 名稱 | 預估工時 | 狀態 |
 |-------|------|---------|------|
-| 0 | 骨架 | ~數天 | ⬜ 未開始 |
+| 0 | 骨架 | ~數天 | 🟨 進行中（CI 待 remote） |
 | 1 | 資料層 | ~1.5 週 | ⬜ 未開始 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ⬜ 未開始 |
 | 3 | 訊號與組合層 | ~1 週 | ⬜ 未開始 |
@@ -26,22 +26,26 @@
 
 ---
 
-## Phase 0 — 骨架　⬜
+## Phase 0 — 骨架　🟨
 
 repo 初始化、pydantic config、pytest + CI、pre-commit（ruff/black）、目錄結構。
+套件管理採 **uv**（Python 3.12）。
 
 ### 任務
-- [ ] 建立 git repo　←　*本次已完成 git init*
-- [ ] 建立 §2.1 模組目錄結構（`quantcore/` 下 config/data/models/signals/portfolio/backtest/experiments/presentation）
-- [ ] `config/schema.py`（pydantic 型別化 config）
-- [ ] `config/default.yaml`（規格 §7.2 範例）
-- [ ] pytest 設定 + 一個 dummy test
-- [ ] pre-commit（ruff / black）
-- [ ] GitHub Actions CI
+- [x] 建立 git repo
+- [x] 建立 §2.1 模組目錄結構（`quantcore/` 下 config/data/models/signals/portfolio/backtest/experiments/presentation，含 `__init__.py`）
+- [x] `pyproject.toml`（uv、依賴、ruff/black/pytest 設定集中一處）
+- [x] `config/schema.py`（pydantic 型別化 config，`extra=forbid` + 跨欄位驗證）
+- [x] `config/default.yaml`（規格 §7.2）
+- [x] pytest 設定 + dummy test（`tests/test_smoke.py`）+ config 驗證測試（`tests/test_config.py`，7 項全綠）
+- [x] pre-commit（ruff / black / 基本 hooks）
+- [x] GitHub Actions CI workflow（`.github/workflows/ci.yml`，寫好待 remote 生效）
 
 ### AC（驗收條件）
-- [ ] CI 綠燈跑一個 dummy test
-- [ ] config 能載入並驗證 `default.yaml`
+- [x] config 能載入並驗證 `default.yaml`（已本地驗證）
+- [~] CI 綠燈跑 dummy test — **本地** `uv run pytest` 7 項全綠、ruff/black 乾淨；GitHub Actions 需建立 remote 後 push 才會實際跑（屬你自己執行的操作）
+
+> **待你處理**：建立 GitHub repo → `git remote add origin <url>` → `git push -u origin main`，CI 即自動生效，屆時 Phase 0 可標記為 ✅。
 
 ---
 
@@ -177,4 +181,5 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 ---
 
 ## 變更紀錄
-- 2026-07-13：建立進度追蹤文件；完成 git init、`.claude/`、`CLAUDE.md`、`.gitignore`。Phase 0 中「建立 git repo」子項完成，其餘待辦。
+- 2026-07-13：建立進度追蹤文件；完成 git init、`.claude/`、`CLAUDE.md`、`.gitignore`。
+- 2026-07-13：Phase 0 骨架完成（uv 環境、§2.1 目錄樹、pydantic config schema + default.yaml、pytest 7 項全綠、ruff/black、pre-commit、CI workflow）。僅剩 CI 需 remote 才能實際綠燈。

@@ -1,0 +1,68 @@
+"""Phase 0 AC：config 能載入並驗證 default.yaml。"""
+
+from datetime import date
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from quantcore.config import QuantConfig, load_config
+
+DEFAULT_YAML = Path(__file__).resolve().parents[1] / "quantcore" / "config" / "default.yaml"
+
+
+def test_default_yaml_loads_and_validates():
+    cfg = load_config(DEFAULT_YAML)
+    assert isinstance(cfg, QuantConfig)
+    # 抽查數值與規格 §7.2 一致
+    assert cfg.seed == 42
+    assert cfg.signal.top_k == 5
+    assert cfg.signal.momentum_lookback == 252
+    assert cfg.signal.momentum_skip == 21
+    assert cfg.risk.vol_target_annual == 0.10
+    assert cfg.risk.vol_model == "garch_arch"
+    assert cfg.backtest.start == date(2005, 1, 3)
+    assert len(cfg.universe.menu) == 21
+
+
+def _valid_dict() -> dict:
+    """從 default.yaml 取一份可用的 dict 作為修改基底。"""
+    import yaml
+
+    with DEFAULT_YAML.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def test_unknown_key_rejected():
+    raw = _valid_dict()
+    raw["unexpected_field"] = 123
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_top_k_cannot_exceed_menu_size():
+    raw = _valid_dict()
+    raw["signal"]["top_k"] = len(raw["universe"]["menu"]) + 1
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_momentum_skip_must_be_less_than_lookback():
+    raw = _valid_dict()
+    raw["signal"]["momentum_skip"] = raw["signal"]["momentum_lookback"]
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_duplicate_ticker_rejected():
+    raw = _valid_dict()
+    raw["universe"]["menu"].append(raw["universe"]["menu"][0])
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_invalid_vol_model_rejected():
+    raw = _valid_dict()
+    raw["risk"]["vol_model"] = "not_a_real_model"
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)

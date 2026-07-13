@@ -1,0 +1,32 @@
+# GitHub Actions CI（規格 §8：每次 push 跑全部測試，測試不綠不開新功能）
+# 目前尚未建立 git remote；推上 GitHub 後此 workflow 自動生效。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Black format check
+        run: uv run black --check .
+
+      - name: Run tests
+        run: uv run pytest
