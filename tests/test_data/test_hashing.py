@@ -40,3 +40,25 @@ def test_nan_is_deterministic():
 def test_snapshot_id_format():
     sid = snapshot_id(pd.Timestamp("2026-07-13"), "deadbeefcafe")
     assert sid == "2026-07-13_deadbe"
+
+
+def test_hash_independent_of_column_order():
+    df1 = _frame()
+    df2 = df1[["ticker", "date", "adj_close"]]  # 相同資料、欄序不同
+    a = canonicalize(df1, sort_cols=["ticker", "date"])
+    b = canonicalize(df2, sort_cols=["ticker", "date"])
+    assert canonical_hash(a) == canonical_hash(b)
+
+
+def test_int_and_bool_branches_stable_and_distinct():
+    base = pd.DataFrame({"k": [0, 1, 2]})
+    assert canonical_hash(base) == canonical_hash(base.copy())
+    as_bool = pd.DataFrame({"k": [False, True, True]})
+    # int 欄與 bool 欄不應碰撞（dtype kind 已折入雜湊）
+    assert canonical_hash(base) != canonical_hash(as_bool)
+
+
+def test_float_nan_and_signed_zero_normalized():
+    canonical = pd.DataFrame({"x": [np.nan, 0.0, 1.0]})
+    computed_nan = pd.DataFrame({"x": [np.float64(0.0) / np.float64(0.0), -0.0, 1.0]})
+    assert canonical_hash(canonical) == canonical_hash(computed_nan)

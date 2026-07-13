@@ -15,20 +15,28 @@ import pandas as pd
 
 
 def canonicalize(df: pd.DataFrame, sort_cols: list[str]) -> pd.DataFrame:
-    """固定列序、欄序、重設索引。hash 前一律先過此函數。"""
+    """固定列序、重設索引。欄序不影響雜湊（canonical_hash 以欄名排序處理）。
+
+    hash 前一律先過此函數。
+    """
     return df.sort_values(sort_cols, kind="stable").reset_index(drop=True)
 
 
 def canonical_hash(df: pd.DataFrame) -> str:
     """對 canonicalize 後的 DataFrame 計算決定性 SHA-256。"""
+    # 注意：僅支援 float64/int/uint/bool/datetime64/object 欄；
+    # pandas nullable 擴充型別（Int64/boolean/Float64 + pd.NA）不在 Phase 1 範圍。
     h = hashlib.sha256()
-    for col in df.columns:
+    for col in sorted(df.columns):
         h.update(str(col).encode("utf-8"))
         s = df[col]
         kind = s.dtype.kind
         h.update(kind.encode("ascii"))
         if kind == "f":
-            h.update(np.ascontiguousarray(s.to_numpy(dtype="float64")).tobytes())
+            arr = s.to_numpy(dtype="float64").copy()
+            arr[np.isnan(arr)] = np.nan  # 統一 NaN 位元樣式（避免負號 NaN 分歧）
+            arr[arr == 0.0] = 0.0  # -0.0 → +0.0
+            h.update(np.ascontiguousarray(arr).tobytes())
         elif kind in ("i", "u"):
             h.update(np.ascontiguousarray(s.to_numpy(dtype="int64")).tobytes())
         elif kind == "b":
