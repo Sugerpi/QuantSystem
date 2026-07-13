@@ -13,7 +13,7 @@
 
 | Phase | 名稱 | 預估工時 | 狀態 |
 |-------|------|---------|------|
-| 0 | 骨架 | ~數天 | 🟨 進行中（CI 待 remote） |
+| 0 | 骨架 | ~數天 | ✅ 完成 |
 | 1 | 資料層 | ~1.5 週 | ⬜ 未開始 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ⬜ 未開始 |
 | 3 | 訊號與組合層 | ~1 週 | ⬜ 未開始 |
@@ -26,10 +26,10 @@
 
 ---
 
-## Phase 0 — 骨架　🟨
+## Phase 0 — 骨架　✅
 
 repo 初始化、pydantic config、pytest + CI、pre-commit（ruff/black）、目錄結構。
-套件管理採 **uv**（Python 3.12）。
+套件管理採 **uv**（Python 3.12）。Remote：https://github.com/Sugerpi/QuantSystem
 
 ### 任務
 - [x] 建立 git repo
@@ -43,9 +43,9 @@ repo 初始化、pydantic config、pytest + CI、pre-commit（ruff/black）、�
 
 ### AC（驗收條件）
 - [x] config 能載入並驗證 `default.yaml`（已本地驗證）
-- [~] CI 綠燈跑 dummy test — **本地** `uv run pytest` 7 項全綠、ruff/black 乾淨；GitHub Actions 需建立 remote 後 push 才會實際跑（屬你自己執行的操作）
+- [x] CI 綠燈跑 dummy test — 已 push 至 remote，GitHub Actions **首次執行成功（conclusion: success）**；本地 `uv run pytest` 7 項全綠、ruff/black 乾淨
 
-> **待你處理**：建立 GitHub repo → `git remote add origin <url>` → `git push -u origin main`，CI 即自動生效，屆時 Phase 0 可標記為 ✅。
+**Phase 0 完成。** 可進入 Phase 1（資料層）。
 
 ---
 
@@ -182,4 +182,5 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 
 ## 變更紀錄
 - 2026-07-13：建立進度追蹤文件；完成 git init、`.claude/`、`CLAUDE.md`、`.gitignore`。
-- 2026-07-13：Phase 0 骨架完成（uv 環境、§2.1 目錄樹、pydantic config schema + default.yaml、pytest 7 項全綠、ruff/black、pre-commit、CI workflow）。僅剩 CI 需 remote 才能實際綠燈。
+- 2026-07-13：Phase 0 骨架完成（uv 環境、§2.1 目錄樹、pydantic config schema + default.yaml、pytest 7 項全綠、ruff/black、pre-commit、CI workflow）。
+- 2026-07-13：push 至 remote（github.com/Sugerpi/QuantSystem），GitHub Actions CI 首次執行成功。**Phase 0 全部 AC 達成 ✅**。
