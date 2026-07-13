@@ -1,4 +1,4 @@
-"""FRED 正規化：DTB3 原始序列 → 清理後 Series（去除缺值標記）。"""
+"""FRED 正規化：DTB3 原始序列 → tz-naive、依日期排序的 Series（NaN 保留，缺值處理交驗證層）。"""
 
 import numpy as np
 import pandas as pd
