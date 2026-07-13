@@ -30,6 +30,9 @@ def normalize_yfinance(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """單一 ticker 的 yfinance 原始 frame → tidy 長格式。"""
     if raw is None or raw.empty:
         return empty_prices()
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw = raw.copy()
+        raw.columns = raw.columns.get_level_values(0)
     out = pd.DataFrame(
         {
             "date": _to_naive_normalized_index(raw.index),
@@ -57,6 +60,7 @@ class YFinanceAdapter:
                 auto_adjust=False,
                 actions=False,
                 progress=False,
+                multi_level_index=False,
             )
             frames.append(normalize_yfinance(raw, t))
         return pd.concat(frames, ignore_index=True) if frames else empty_prices()
