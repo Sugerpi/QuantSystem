@@ -90,3 +90,54 @@ def test_monotonic_rejects_duplicate_dates():
     prices = _prices("SPY", ["2020-01-02", "2020-01-02"], [100.0, 101.0], [100.0, 101.0])
     res = check_monotonic(prices)
     assert not res.passed
+
+
+def test_missing_values_all_nan_ticker_hard_fails():
+    dates = pd.bdate_range("2020-01-02", periods=4)
+    prices = _prices("BAD", dates, [100.0] * 4, [np.nan] * 4)
+    res = check_missing_values(prices, max_consecutive_nan=5)
+    assert not res.passed
+    assert res.hard_fail
+
+
+def test_missing_values_passes_clean_series():
+    dates = pd.bdate_range("2020-01-02", periods=5)
+    prices = _prices("SPY", dates, [100.0] * 5, [100.0, 101.0, 102.0, 103.0, 104.0])
+    res = check_missing_values(prices, max_consecutive_nan=5)
+    assert res.passed
+    assert not res.hard_fail
+
+
+def test_missing_values_leading_nan_exempt():
+    adj = [np.nan] * 7 + [100.0, 101.0]  # 上市前前導 NaN，超過上限但應豁免
+    dates = pd.bdate_range("2020-01-02", periods=9)
+    prices = _prices("HYG", dates, [100.0] * 9, adj)
+    res = check_missing_values(prices, max_consecutive_nan=5)
+    assert res.passed
+
+
+def test_missing_values_run_equal_limit_reports_not_reject():
+    adj = [100.0, np.nan, np.nan, np.nan, np.nan, np.nan, 101.0]  # 5 連續 == 上限
+    dates = pd.bdate_range("2020-01-02", periods=7)
+    prices = _prices("SPY", dates, [100.0] * 7, adj)
+    res = check_missing_values(prices, max_consecutive_nan=5)
+    assert res.passed  # 5 == 5，非 > 5
+    assert res.report  # 但仍有報告
+
+
+def test_extreme_returns_passes_when_calm():
+    prices = _prices("SPY", ["2020-01-02", "2020-01-03"], [100.0, 100.5], [100.0, 100.5])
+    res = check_extreme_returns(prices, threshold=0.20)
+    assert res.passed
+
+
+def test_calendar_passes_on_valid_sessions():
+    prices = _prices("SPY", ["2020-01-02", "2020-01-03"], [100.0, 101.0], [100.0, 101.0])
+    res = check_calendar(prices, NyseCalendar())
+    assert res.passed
+
+
+def test_monotonic_passes_on_increasing_dates():
+    prices = _prices("SPY", ["2020-01-02", "2020-01-03"], [100.0, 101.0], [100.0, 101.0])
+    res = check_monotonic(prices)
+    assert res.passed

@@ -86,10 +86,15 @@ def check_missing_values(prices: pd.DataFrame, max_consecutive_nan: int) -> Vali
     """§4.3-3：上市後序列中間 NaN → 報告；連續 > 上限 → 拒絕。"""
     report = []
     hard = False
-    for ticker, g in prices.sort_values("date").groupby("ticker"):
+    for ticker, g in prices.sort_values(["ticker", "date"]).groupby("ticker"):
         s = g["adj_close"].to_numpy()
+        if not (~np.isnan(s)).any():
+            # 整段皆 NaN = 資料完全遺失（非「尚未上市」），硬失敗
+            report.append({"ticker": ticker, "all_nan": True})
+            hard = True
+            continue
         # 去除上市前的前導 NaN
-        first_valid = np.argmax(~np.isnan(s)) if (~np.isnan(s)).any() else len(s)
+        first_valid = int(np.argmax(~np.isnan(s)))
         core = s[first_valid:]
         run = 0
         max_run = 0
