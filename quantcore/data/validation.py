@@ -29,7 +29,16 @@ def _per_ticker_returns(prices: pd.DataFrame, price_col: str) -> pd.DataFrame:
 def check_total_return(
     prices: pd.DataFrame, dividends: pd.DataFrame, tol_bps: float
 ) -> ValidationResult:
-    """§4.3-1：除息日 adj 報酬 ≈ close 報酬 + 股息/前收盤（容差內）。"""
+    """§4.3-1：除息日 adj 報酬 ≈ close 報酬 + 股息/前收盤（容差內）。
+
+    呼叫端須傳入單一 ticker 的價格與該 ticker 的股息。
+    """
+    tickers = prices["ticker"].unique()
+    if len(tickers) > 1:
+        raise ValueError(
+            "check_total_return 為單一 ticker 檢查（§4.3-1 對 SPY 抽查）；"
+            f"收到多檔 {list(tickers)}，請先切片為單一 ticker 再呼叫。"
+        )
     df = prices.sort_values("date").copy()
     df["close_ret"] = df["close"].pct_change()
     df["adj_ret"] = df["adj_close"].pct_change()

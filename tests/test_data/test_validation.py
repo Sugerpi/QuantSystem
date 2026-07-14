@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from quantcore.data.calendar import NyseCalendar
 from quantcore.data.validation import (
@@ -47,6 +48,20 @@ def test_total_return_fails_when_dividend_ignored():
     res = check_total_return(prices, dividends, tol_bps=10)
     assert not res.passed
     assert res.hard_fail
+
+
+def test_total_return_rejects_multi_ticker_input():
+    dates = ["2020-03-19", "2020-03-20"]
+    prices = pd.concat(
+        [
+            _prices("SPY", dates, [100.0, 101.0], [100.0, 101.0]),
+            _prices("QQQ", dates, [200.0, 250.0], [200.0, 250.0]),
+        ],
+        ignore_index=True,
+    )
+    dividends = pd.DataFrame({"date": pd.to_datetime(["2020-03-20"]), "dividend": [1.0]})
+    with pytest.raises(ValueError, match="單一 ticker"):
+        check_total_return(prices, dividends, tol_bps=10)
 
 
 def test_extreme_returns_flagged():
