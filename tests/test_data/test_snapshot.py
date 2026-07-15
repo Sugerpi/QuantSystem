@@ -143,6 +143,46 @@ def test_snapshot_fails_when_validation_missing_ticker(tmp_path):
         )
 
 
+def test_snapshot_writes_arbiter_overrides(tmp_path):
+    cfg = _small_config()
+    dates = _sessions()
+
+    base = list(100 + np.arange(len(dates)) * 0.1)
+
+    class _PrimaryClean(_FakePrimary):
+        def fetch_prices(self, tickers, start, end):
+            return pd.concat([_tidy(t, self._dates, base) for t in tickers], ignore_index=True)
+
+    class _ValidationOneGlitch(_FakePrimary):
+        def fetch_prices(self, tickers, start, end):
+            frames = []
+            for t in tickers:
+                adj = base.copy()
+                adj[5] = adj[5] * 1.03  # 單一孤立日偏移（不成群，仍通過窗規則）
+                frames.append(_tidy(t, self._dates, adj))
+            return pd.concat(frames, ignore_index=True)
+
+    class _ArbiterLikePrimary(_FakePrimary):
+        def fetch_prices(self, tickers, start, end):
+            # close 跟隨 primary（正確），adj_close 無所謂
+            return pd.concat([_tidy(t, self._dates, base) for t in tickers], ignore_index=True)
+
+    d = create_snapshot(
+        cfg,
+        primary=_PrimaryClean(cfg.universe.menu, dates),
+        validation=_ValidationOneGlitch(cfg.universe.menu, dates),
+        rates=_FakeRates(dates),
+        arbiter=_ArbiterLikePrimary(cfg.universe.menu, dates),
+        out_root=tmp_path / "snapshots",
+        build_date=pd.Timestamp("2026-07-13"),
+    )
+    snap = load_snapshot(d)
+    overrides = snap["metadata"]["overrides"]
+    assert len(overrides) >= 1
+    assert all(o["verdict"] == "validation_outlier" for o in overrides)
+    # JSON round-trip 完整（load_snapshot 已解析寫出的 metadata.json）
+
+
 def test_load_snapshot_detects_tampering(tmp_path):
     cfg = _small_config()
     dates = _sessions()

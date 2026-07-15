@@ -54,16 +54,38 @@ def _run_validation(
     ]
 
 
+def _json_safe_overrides(overrides: list[dict]) -> list[dict]:
+    """把 overrides 中的 numpy 純量轉成 JSON 原生型別（避免 json.dumps TypeError）。"""
+    safe = []
+    for o in overrides:
+        safe.append(
+            {
+                k: (
+                    None
+                    if (isinstance(v, float) and pd.isna(v))
+                    else float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+                )
+                for k, v in o.items()
+            }
+        )
+    return safe
+
+
 def create_snapshot(
     cfg: QuantConfig,
     *,
     primary,
     validation,
     rates,
+    arbiter=None,
     out_root: Path,
     build_date: pd.Timestamp,
 ) -> Path:
-    """建立快照目錄並回傳其 Path。任一硬性驗證失敗 → raise ValueError。"""
+    """建立快照目錄並回傳其 Path。任一硬性驗證失敗 → raise ValueError。
+
+    arbiter 為可選第三源（如 Stooq）：僅盡力抓取（best-effort），不納入驗證來源
+    覆蓋檢查；若提供則傳入 cross_validate 供 §4.5 少數服從多數裁決。
+    """
     out_root = Path(out_root)
     menu = cfg.universe.menu
     start, end = cfg.backtest.start, build_date.date()
@@ -71,6 +93,9 @@ def create_snapshot(
 
     prices = primary.fetch_prices(menu, start, end)[PRICE_COLUMNS]
     val_prices = validation.fetch_prices(menu, start, end)[PRICE_COLUMNS]
+    arb_prices = None
+    if arbiter is not None:
+        arb_prices = arbiter.fetch_prices(menu, start, end)[PRICE_COLUMNS]
     metadata_raw = primary.fetch_metadata(menu)
     # §4.3-1 僅抽查 SPY，且 check_total_return 為單一 ticker 契約、股息 date-keyed，
     # 故只取 SPY 股息（避免跨檔股息污染）。
@@ -98,6 +123,7 @@ def create_snapshot(
         discrepancy_bps=dq.discrepancy_bps,
         window_days=dq.window_days,
         window_max_hits=dq.window_max_hits,
+        arbiter=arb_prices,
     )
     if not xs.passed:
         raise ValueError(f"跨源驗證失敗（§4.5），需人工裁決：{xs.failed_assets}")
@@ -120,7 +146,7 @@ def create_snapshot(
     }
     metadata = {
         "tickers": metadata_raw,
-        "overrides": [],
+        "overrides": _json_safe_overrides(xs.overrides),
         "sources": providers_meta,
     }
     meta_bytes = json.dumps(metadata, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -192,6 +218,7 @@ def _cli(argv: list[str] | None = None) -> int:
 
     if args.command == "create":
         from quantcore.data.providers.fred_adapter import FredAdapter
+        from quantcore.data.providers.stooq_adapter import StooqAdapter
         from quantcore.data.providers.tiingo_adapter import TiingoAdapter
         from quantcore.data.providers.yfinance_adapter import YFinanceAdapter
 
@@ -201,6 +228,7 @@ def _cli(argv: list[str] | None = None) -> int:
             primary=YFinanceAdapter(),
             validation=TiingoAdapter(),
             rates=FredAdapter(),
+            arbiter=StooqAdapter(),
             out_root=Path("snapshots"),
             build_date=pd.Timestamp.now().normalize(),
         )
