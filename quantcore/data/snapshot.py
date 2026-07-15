@@ -11,6 +11,7 @@ import hashlib
 import json
 import sys
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pandas as pd
@@ -29,6 +30,11 @@ from quantcore.data.hashing import (
 from quantcore.data.provider import PRICE_COLUMNS
 
 _RATES_SERIES = "DTB3"
+
+try:
+    _QC_VERSION = version("quantcore")
+except PackageNotFoundError:  # pragma: no cover
+    _QC_VERSION = "unknown"
 
 
 def _run_validation(
@@ -107,10 +113,15 @@ def create_snapshot(
         ),
         ["date"],
     )
+    providers_meta = {
+        "primary": type(primary).__name__,
+        "validation": [type(validation).__name__],
+        "rates": type(rates).__name__,
+    }
     metadata = {
         "tickers": metadata_raw,
         "overrides": [],
-        "sources": {"primary": "yfinance", "validation": ["tiingo"]},
+        "sources": providers_meta,
     }
     meta_bytes = json.dumps(metadata, sort_keys=True, ensure_ascii=False).encode("utf-8")
 
@@ -140,8 +151,8 @@ def create_snapshot(
         },
         "discrepancy_report_hash": disc_hash,
         "discrepancy_report": xs.report,
-        "providers": {"primary": "yfinance", "validation": ["tiingo"]},
-        "quantcore_version": "0.1.0",
+        "providers": providers_meta,
+        "quantcore_version": _QC_VERSION,
     }
     (out_dir / "MANIFEST.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -155,10 +166,15 @@ def load_snapshot(snapshot_dir: str | Path) -> dict:
     manifest = json.loads((d / "MANIFEST.json").read_text(encoding="utf-8"))
     prices = pd.read_parquet(d / "prices.parquet")
     rates = pd.read_parquet(d / "rates.parquet")
-    metadata = json.loads((d / "metadata.json").read_text(encoding="utf-8"))
-    prices_c = canonicalize(prices, ["ticker", "date"])
-    if canonical_hash(prices_c) != manifest["content_hashes"]["prices.parquet"]:
+    meta_bytes = (d / "metadata.json").read_bytes()
+    metadata = json.loads(meta_bytes.decode("utf-8"))
+    ch = manifest["content_hashes"]
+    if canonical_hash(canonicalize(prices, ["ticker", "date"])) != ch["prices.parquet"]:
         raise ValueError(f"快照 prices.parquet hash 不符：{d}")
+    if canonical_hash(canonicalize(rates, ["date"])) != ch["rates.parquet"]:
+        raise ValueError(f"快照 rates.parquet hash 不符：{d}")
+    if hashlib.sha256(meta_bytes).hexdigest() != ch["metadata.json"]:
+        raise ValueError(f"快照 metadata.json hash 不符：{d}")
     return {
         "prices": prices,
         "rates": rates,

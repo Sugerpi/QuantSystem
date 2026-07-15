@@ -122,3 +122,40 @@ def test_snapshot_fails_on_calendar_violation(tmp_path):
             out_root=tmp_path / "snapshots",
             build_date=pd.Timestamp("2026-07-13"),
         )
+
+
+def test_snapshot_fails_when_validation_missing_ticker(tmp_path):
+    cfg = _small_config()
+    dates = _sessions()
+
+    class _PartialValidation(_FakePrimary):
+        def fetch_prices(self, tickers, start, end):
+            return super().fetch_prices(["SPY"], start, end)  # 漏掉 QQQ
+
+    with pytest.raises(ValueError, match="驗證來源未回傳"):
+        create_snapshot(
+            cfg,
+            primary=_FakePrimary(cfg.universe.menu, dates),
+            validation=_PartialValidation(cfg.universe.menu, dates),
+            rates=_FakeRates(dates),
+            out_root=tmp_path / "snapshots",
+            build_date=pd.Timestamp("2026-07-13"),
+        )
+
+
+def test_load_snapshot_detects_tampering(tmp_path):
+    cfg = _small_config()
+    dates = _sessions()
+    d = create_snapshot(
+        cfg,
+        primary=_FakePrimary(cfg.universe.menu, dates),
+        validation=_FakeValidation(cfg.universe.menu, dates),
+        rates=_FakeRates(dates),
+        out_root=tmp_path / "snapshots",
+        build_date=pd.Timestamp("2026-07-13"),
+    )
+    tampered = pd.read_parquet(d / "prices.parquet")
+    tampered.loc[0, "close"] = tampered.loc[0, "close"] + 999.0
+    tampered.to_parquet(d / "prices.parquet", index=False)
+    with pytest.raises(ValueError, match="hash 不符"):
+        load_snapshot(d)
