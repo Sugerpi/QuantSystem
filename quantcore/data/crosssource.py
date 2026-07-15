@@ -88,9 +88,8 @@ def cross_validate(
                 "ret_v": r["ret_v"],
                 "diff": r["diff"],
                 "verdict": verdict,
+                "ret_a": None if pd.isna(ret_a) else float(ret_a),
             }
-            if pd.notna(ret_a):
-                row["ret_a"] = ret_a
             report.append(row)
 
             if verdict != "unresolved":

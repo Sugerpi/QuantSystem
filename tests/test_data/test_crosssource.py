@@ -185,3 +185,56 @@ def test_arbiter_missing_day_is_unresolved_and_counts():
     unresolved_rows = [r for r in res.report if r["verdict"] == "unresolved"]
     assert len(unresolved_rows) >= 3
     assert res.overrides == []
+
+
+def test_arbiter_uses_close_not_adj_close():
+    dates = pd.bdate_range("2020-01-02", periods=40)
+    adj_p = list(100 + np.arange(40) * 0.5)
+    adj_v = adj_p.copy()
+    for i in (10, 12, 14):
+        adj_v[i] = adj_v[i] * 1.02  # validation 有 cluster 偏移
+    primary = _prices("SPY", dates, adj_p)
+    validation = _prices("SPY", dates, adj_v)
+    # arbiter：close 與 primary 一致（正確價格）；adj_close 卻誤導性地跟隨 validation
+    arb = pd.DataFrame(
+        {
+            "date": pd.to_datetime(dates),
+            "ticker": "SPY",
+            "close": adj_p,  # 正確：與 primary 一致
+            "adj_close": adj_v,  # 誤導：若程式錯用 adj_close 會判成 primary_outlier
+            "volume": [1e6] * 40,
+        }
+    )
+    res = cross_validate(
+        primary,
+        validation,
+        arbiter=arb,
+        discrepancy_bps=50,
+        window_days=30,
+        window_max_hits=3,
+    )
+    assert res.passed  # 用 close 仲裁 → primary≈arbiter → validation_outlier → 通過
+    assert any(o["verdict"] == "validation_outlier" for o in res.overrides)
+
+
+def test_arbiter_disagrees_with_both_is_unresolved():
+    dates = pd.bdate_range("2020-01-02", periods=40)
+    adj_p = list(100 + np.arange(40) * 0.5)
+    adj_v = adj_p.copy()
+    arb_close = adj_p.copy()
+    for i in (10, 12, 14):
+        adj_v[i] = adj_v[i] * 1.02  # validation 偏移
+        arb_close[i] = arb_close[i] * 1.04  # arbiter 與 primary、validation 都不同
+    primary = _prices("SPY", dates, adj_p)
+    validation = _prices("SPY", dates, adj_v)
+    arb = _prices_close("SPY", dates, arb_close)
+    res = cross_validate(
+        primary,
+        validation,
+        arbiter=arb,
+        discrepancy_bps=50,
+        window_days=30,
+        window_max_hits=3,
+    )
+    assert not res.passed  # 無多數 → unresolved → 仍失敗
+    assert "SPY" in res.failed_assets
