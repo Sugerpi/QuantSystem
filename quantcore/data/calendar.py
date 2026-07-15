@@ -9,8 +9,13 @@ import pandas as pd
 class NyseCalendar:
     """XNYS 交易日曆的薄封裝，對外只暴露本專案需要的查詢。"""
 
+    # exchange_calendars 預設只建近 ~20 年的日曆（首個 session 約為今日往前 20 年），
+    # 但快照回溯到 2005（規格 §1.1 建議起點），故明確指定夠早的起始界，
+    # 涵蓋選單最早標的（SPY 1993）之前。
+    _START_BOUND = "1990-01-01"
+
     def __init__(self) -> None:
-        self._cal = xcals.get_calendar("XNYS")
+        self._cal = xcals.get_calendar("XNYS", start=pd.Timestamp(self._START_BOUND))
 
     def is_session(self, day: pd.Timestamp) -> bool:
         return self._cal.is_session(pd.Timestamp(day).normalize())
