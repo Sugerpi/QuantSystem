@@ -218,8 +218,8 @@ def _cli(argv: list[str] | None = None) -> int:
 
     if args.command == "create":
         from quantcore.data.providers.fred_adapter import FredAdapter
-        from quantcore.data.providers.stooq_adapter import StooqAdapter
         from quantcore.data.providers.tiingo_adapter import TiingoAdapter
+        from quantcore.data.providers.twelvedata_adapter import TwelveDataAdapter
         from quantcore.data.providers.yfinance_adapter import YFinanceAdapter
 
         cfg = load_config(args.config)
@@ -228,7 +228,7 @@ def _cli(argv: list[str] | None = None) -> int:
             primary=YFinanceAdapter(),
             validation=TiingoAdapter(),
             rates=FredAdapter(),
-            arbiter=StooqAdapter(),
+            arbiter=TwelveDataAdapter(),
             out_root=Path("snapshots"),
             build_date=pd.Timestamp.now().normalize(),
         )
