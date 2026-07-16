@@ -22,7 +22,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.risk.vol_target_annual == 0.10
     assert cfg.risk.vol_model == "garch_arch"
     assert cfg.backtest.start == date(2005, 1, 3)
-    assert len(cfg.universe.menu) == 21
+    assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
 
 def _valid_dict() -> dict:
