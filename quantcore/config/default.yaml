@@ -1,7 +1,7 @@
 # QuantCore 預設參數（規格 §7.2）
 # 全系統唯一的參數來源。修改前先確認對應規格章節。
 
-snapshot: snapshots/PLACEHOLDER      # Phase 1 建立快照後填入實際目錄
+snapshot: snapshots/2026-07-16_20ed09   # Phase 1 首份快照（20 檔，三源仲裁，決定性可重現）
 seed: 42
 
 universe:                            # §1.1 資產選單（v1 預設約 22 檔）
