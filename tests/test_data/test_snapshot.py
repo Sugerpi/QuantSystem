@@ -6,7 +6,7 @@ import pytest
 
 from quantcore.config import load_config
 from quantcore.config.schema import QuantConfig
-from quantcore.data.snapshot import create_snapshot, load_snapshot
+from quantcore.data.snapshot import _cli, create_snapshot, load_snapshot
 
 CONFIG_YAML = "quantcore/config/default.yaml"
 
@@ -181,6 +181,28 @@ def test_snapshot_writes_arbiter_overrides(tmp_path):
     assert len(overrides) >= 1
     assert all(o["verdict"] == "validation_outlier" for o in overrides)
     # JSON round-trip 完整（load_snapshot 已解析寫出的 metadata.json）
+
+
+def test_cli_inspect_summarizes_snapshot(tmp_path, capsys):
+    """摘要須帶出快照身分、標的與列數；不釘死排版（格式可自由調整）。"""
+    cfg = _small_config()
+    dates = _sessions()
+    d = create_snapshot(
+        cfg,
+        primary=_FakePrimary(cfg.universe.menu, dates),
+        validation=_FakeValidation(cfg.universe.menu, dates),
+        rates=_FakeRates(dates),
+        out_root=tmp_path / "snapshots",
+        build_date=pd.Timestamp("2026-07-13"),
+    )
+    rc = _cli(["inspect", "--snapshot", str(d)])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert d.name in out
+    assert "SPY" in out and "QQQ" in out
+    assert str(len(dates) * 2) in out  # prices 列數 = 交易日 × 標的數
+    assert "DTB3" in out
 
 
 def test_load_snapshot_detects_tampering(tmp_path):
