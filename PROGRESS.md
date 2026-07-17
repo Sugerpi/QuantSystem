@@ -38,7 +38,12 @@ repo 初始化、pydantic config、pytest + CI、pre-commit（ruff/black）、�
 - [x] `config/schema.py`（pydantic 型別化 config，`extra=forbid` + 跨欄位驗證）
 - [x] `config/default.yaml`（規格 §7.2）
 - [x] pytest 設定 + dummy test（`tests/test_smoke.py`）+ config 驗證測試（`tests/test_config.py`，7 項全綠）
-- [x] pre-commit（ruff / black / 基本 hooks）
+- [x] pre-commit（ruff lint / ruff-format / 基本 hooks）
+  - 2026-07-17 修正：原設定同時掛 black 與 ruff-format，兩者對三元運算子鏈與隱式
+    字串串接的換行意見不同，會在每次 commit 互相改寫同一個檔案；且 `.git/hooks/`
+    從未 install，故本機無人把關（此項當時的勾只代表設定檔存在）。現已移除 black
+    （pre-commit / pyproject dev deps / `[tool.black]` / CI 的 format 檢查一併改為
+    ruff format），並實際執行 `uv run pre-commit install`。
 - [x] GitHub Actions CI workflow（`.github/workflows/ci.yml`，寫好待 remote 生效）
 
 ### AC（驗收條件）

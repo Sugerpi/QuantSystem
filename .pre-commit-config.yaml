@@ -1,4 +1,7 @@
 # pre-commit 設定（規格 §9 Phase 0）。安裝：uv run pre-commit install
+#
+# formatter 只有 ruff-format 一個。曾經 black 與 ruff-format 並存，兩者對
+# 三元運算子鏈與隱式字串串接的換行意見不同，會在每次 commit 互相改寫同一個檔案。
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.0
@@ -6,11 +9,6 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
