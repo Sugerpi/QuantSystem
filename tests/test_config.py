@@ -22,7 +22,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.risk.vol_target_annual == 0.10
     assert cfg.risk.vol_model == "garch_arch"
     assert cfg.backtest.start == date(2005, 1, 3)
-    assert len(cfg.universe.menu) == 21
+    assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
 
 def _valid_dict() -> dict:
@@ -64,5 +64,20 @@ def test_duplicate_ticker_rejected():
 def test_invalid_vol_model_rejected():
     raw = _valid_dict()
     raw["risk"]["vol_model"] = "not_a_real_model"
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_data_quality_loaded():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.data_quality.discrepancy_bps == 50
+    assert cfg.data_quality.window_days == 30
+    assert cfg.data_quality.window_max_hits == 3
+    assert cfg.data_quality.max_consecutive_nan == 5
+
+
+def test_data_quality_rejects_bad_extreme_return():
+    raw = _valid_dict()
+    raw["data_quality"]["extreme_return"] = 1.5  # 必須 < 1
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)

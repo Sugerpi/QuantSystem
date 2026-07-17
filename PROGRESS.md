@@ -14,7 +14,7 @@
 | Phase | 名稱 | 預估工時 | 狀態 |
 |-------|------|---------|------|
 | 0 | 骨架 | ~數天 | ✅ 完成 |
-| 1 | 資料層 | ~1.5 週 | ⬜ 未開始 |
+| 1 | 資料層 | ~1.5 週 | ✅ 完成 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ⬜ 未開始 |
 | 3 | 訊號與組合層 | ~1 週 | ⬜ 未開始 |
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ⬜ 未開始 |
@@ -49,27 +49,36 @@ repo 初始化、pydantic config、pytest + CI、pre-commit（ruff/black）、�
 
 ---
 
-## Phase 1 — 資料層　⬜
+## Phase 1 — 資料層　✅
 
-Provider 介面、yfinance/Tiingo/Stooq/FRED adapters、快照建立與 hash、NYSE 日曆、驗證規則、跨源交叉驗證（§4.5）。
+Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 hash、NYSE 日曆、驗證規則、跨源交叉驗證（§4.5）。
 
 ### 任務
-- [ ] `data/provider.py`（DataProvider Protocol，§4.1）
-- [ ] `providers/yfinance_adapter.py`（primary）
-- [ ] `providers/tiingo_adapter.py`（validation）
-- [ ] `providers/stooq_adapter.py`（arbiter）
-- [ ] `providers/fred_adapter.py`（DTB3）
-- [ ] `data/calendar.py`（NYSE，exchange_calendars）
-- [ ] `data/snapshot.py`（建立/載入/hash 驗證，§4.2）
-- [ ] `data/validation.py`（§4.3 五項檢查）
-- [ ] 跨源交叉驗證流程（§4.5）
+- [x] `data/provider.py`（DataProvider Protocol，§4.1）
+- [x] `providers/yfinance_adapter.py`（primary；adj_close 改為自建決定性調整，見下）
+- [x] `providers/tiingo_adapter.py`（validation；含 429 退避與 token 遮蔽）
+- [x] `providers/stooq_adapter.py`（arbiter，**預留**：免金鑰端點已被 JS 反爬封鎖，未併入）
+- [x] `providers/twelvedata_adapter.py`（**實際第三源仲裁**，取代失效的 Stooq）
+- [x] `providers/fred_adapter.py`（DTB3，keyless）
+- [x] `data/calendar.py`（NYSE，exchange_calendars；起始界 1990 涵蓋 2005）
+- [x] `data/adjust.py`（自 close+股息 back-adjust，決定性含息調整）
+- [x] `data/hashing.py`（canonical hash，守 AC-4）
+- [x] `data/snapshot.py`（建立/載入/hash 驗證 + CLI，§4.2）
+- [x] `data/validation.py`（§4.3 五項檢查）
+- [x] `data/crosssource.py`（跨源交叉驗證 + 三源仲裁，§4.5）
 
 ### AC
-- [ ] `snapshot create` 產出完整快照
-- [ ] 總報酬驗證通過
-- [ ] 跨源日報酬比對全選單通過（或差異已裁決記於 overrides）
-- [ ] 同日重建兩次快照 hash 相同
-- [ ] `tests/test_data/` 全綠
+- [x] `snapshot create` 產出完整快照 → `snapshots/2026-07-16_20ed09`（20 檔，2005-01-03→2026-07-15）
+- [x] 總報酬驗證通過（§4.3）
+- [x] 跨源日報酬比對全選單通過（三源仲裁；345 筆裁決記於 metadata.json overrides）
+- [x] 同日重建兩次快照 hash 相同（build#1 == build#2 == `2026-07-16_20ed09`）
+- [x] `tests/test_data/` 全綠（`uv run pytest` 77 項通過）
+
+### Phase 1 實作備忘（與原規劃的差異）
+- **§4.5 第三源**：規格指定 Stooq，但其免金鑰 CSV 端點現已被 JS 反爬封鎖、`pandas-datareader` 亦移除 Stooq 支援。改用 **Twelve Data**（免費金鑰，`.env` 的 `TWELVEDATA_API_KEY`）為實際仲裁源；Stooq adapter 保留為預留介面。
+- **DBC 移除**：DBC（廣義商品 ETF）2008 崩盤期資料三源（yfinance/Tiingo/TwelveData）彼此皆不一致、§4.5 無法認證，故自 v1 menu 移除（21→20 檔）。日後有可信商品源再加回。
+- **決定性含息調整**：yfinance 的 `Adj Close` 每次抓取會以浮點微差（~1e-6）重算，破壞 AC-4。改為存穩定的原始 `close` + 自建 `adjusted_close`（僅股息，yfinance close 已拆分調整），使快照位元級可重現。
+- **首份真實快照 3 源用量**：yfinance（primary，免費）+ Tiingo（validation，免費金鑰，50 req/hr）+ Twelve Data（arbiter，免費金鑰，8 req/min 節流）+ FRED（DTB3，keyless）。
 
 ---
 
@@ -184,3 +193,4 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-13：建立進度追蹤文件；完成 git init、`.claude/`、`CLAUDE.md`、`.gitignore`。
 - 2026-07-13：Phase 0 骨架完成（uv 環境、§2.1 目錄樹、pydantic config schema + default.yaml、pytest 7 項全綠、ruff/black、pre-commit、CI workflow）。
 - 2026-07-13：push 至 remote（github.com/Sugerpi/QuantSystem），GitHub Actions CI 首次執行成功。**Phase 0 全部 AC 達成 ✅**。
+- 2026-07-16：Phase 1 資料層完成——provider 介面、四 adapters（yfinance/Tiingo/TwelveData/FRED）、NYSE 日曆、決定性 hash、§4.3 五項驗證、§4.5 三源仲裁、決定性含息調整、快照 CLI。首份真實快照 `snapshots/2026-07-16_20ed09`（20 檔）建立；tests/test_data 全綠（77 項）。過程中：Stooq 失效改用 Twelve Data、移除 DBC、將 yfinance 抖動 adj 改為自建決定性調整以達成 AC-4。**Phase 1 全部 AC 達成 ✅**。
