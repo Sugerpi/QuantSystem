@@ -63,7 +63,9 @@ def _json_safe_overrides(overrides: list[dict]) -> list[dict]:
                 k: (
                     None
                     if (isinstance(v, float) and pd.isna(v))
-                    else float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+                    else float(v)
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)
+                    else v
                 )
                 for k, v in o.items()
             }
@@ -209,12 +211,50 @@ def load_snapshot(snapshot_dir: str | Path) -> dict:
     }
 
 
+def _date_range(df: pd.DataFrame) -> str:
+    lo, hi = df["date"].min(), df["date"].max()
+    return f"{lo:%Y-%m-%d} → {hi:%Y-%m-%d}"
+
+
+def format_summary(snap: dict) -> str:
+    """把 load_snapshot 的結果整理成人類可讀的摘要。"""
+    manifest, metadata = snap["manifest"], snap["metadata"]
+    prices, rates = snap["prices"], snap["rates"]
+    tickers = sorted(prices["ticker"].unique())
+    series = [c for c in rates.columns if c != "date"]
+    lines = [
+        f"snapshot_id      : {manifest['snapshot_id']}",
+        f"created_at       : {manifest['created_at']}",
+        f"quantcore_version: {manifest.get('quantcore_version', 'unknown')}",
+        f"config_hash      : {manifest['config_hash']}",
+        f"providers        : {manifest.get('providers', {})}",
+        "",
+        f"prices           : {len(prices)} 列 × {len(prices.columns)} 欄　{_date_range(prices)}",
+        f"  tickers ({len(tickers)})   : {', '.join(tickers)}",
+        f"rates            : {len(rates)} 列　{_date_range(rates)}　series: {', '.join(series)}",
+        "",
+        f"跨源差異未解決    : {len(manifest.get('discrepancy_report', []))} 筆",
+        f"仲裁 overrides   : {len(metadata.get('overrides', []))} 筆",
+    ]
+    return "\n".join(lines)
+
+
 def _cli(argv: list[str] | None = None) -> int:
+    # Windows 主控台的 Python 預設用 locale 編碼（cp950），會把中文輸出燒成亂碼。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(prog="python -m quantcore.data.snapshot")
     sub = parser.add_subparsers(dest="command", required=True)
     create = sub.add_parser("create", help="建立不可變快照")
     create.add_argument("--config", required=True)
+    inspect = sub.add_parser("inspect", help="檢視既有快照摘要（會驗證 content hash）")
+    inspect.add_argument("--snapshot", required=True)
     args = parser.parse_args(argv)
+
+    if args.command == "inspect":
+        print(format_summary(load_snapshot(args.snapshot)))
+        return 0
 
     if args.command == "create":
         from quantcore.data.providers.fred_adapter import FredAdapter
