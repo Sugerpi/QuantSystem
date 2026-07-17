@@ -47,7 +47,13 @@ def create_run_dir(out_root: str | Path, label: str, now: pd.Timestamp) -> Path:
 
 
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
-    """決定性寫檔：固定欄序與列序（沿用 Phase 1 達成 AC-4 的作法）。"""
+    """原樣寫出 df 的欄序與列序，不額外排序。
+
+    決定性靠呼叫端保證：runner 組 df 時列序本就固定（依 strategy_ids、
+    交易日序列逐筆疊代），這裡排序反而多餘，故不做。若未來呼叫端改用
+    不保序的來源（如 dict 迭代、集合運算），需在呼叫端補上排序，而非
+    在此處靜默兜底。
+    """
     df.to_parquet(path, index=False)
 
 
