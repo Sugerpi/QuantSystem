@@ -120,7 +120,7 @@ Phase 2 的兩策略均不使用曝險檢查日（無曝險模型）：`clock` �
 runs/2026-07-17_1432_default/
 ├── config.yaml        # 完整展開（含所有預設值）
 ├── manifest.json
-├── nav.parquet        # date, strategy_id, nav
+├── nav.parquet        # date, strategy_id, nav, turnover, cost
 ├── weights.parquet    # date, strategy_id, ticker, weight   （長格式，含 CASH 列）
 ├── decisions.parquet  # decision_date, execution_date, strategy_id, eligible, selected,
 │                      #   target_weights, + Phase 3-4 模型欄位（null）
@@ -128,6 +128,8 @@ runs/2026-07-17_1432_default/
 ```
 
 **與 §7.1 的偏離**：§7.1 範例目錄名為 `2026-08-15_1432_full_default`（讀作「策略_config」），但同一份 `nav.parquet` 又須容納「所有策略」——一個 run 多策略時，名稱含單一策略名無意義。改為 `YYYY-MM-DD_HHMM_<label>`，`label` 由 CLI `--label` 指定，預設取 config 檔名 stem。
+
+`nav.parquet` 的 `turnover` / `cost` 兩欄為 §7.1 未列出的補充（§7.1 只列檔名不列欄位）：`metrics` 需要總換手與總成本才能算 §6.4 的「年化換手率」與「成本拖累」，而 §11.2 第 5 頁（組合與成本）要畫「每次再平衡換手率」與「累積成本拖累」——在決策當下記錄比事後從權重反推更誠實，亦符合 §6.2 原則。非執行日兩欄為 0。
 
 不產出 `model_details/`（Phase 2 無模型）。§7.1 已規定 dashboard 缺該目錄時顯示「本次未儲存」而非崩潰。
 
@@ -227,5 +229,7 @@ INV-6 測試斷言：兩次跑的 `identity` 相同、四個資料檔逐位元�
 | 2 | run 目錄名改為 `YYYY-MM-DD_HHMM_<label>` | §7.1 範例 | 一個 run 多策略時，名稱含單一策略名無意義（見 §5.1） |
 | 3 | 具體策略置於 `backtest/strategies/` 子套件 | §2.1 模組地圖 | §2.1 只給了介面 `strategy.py`；七策略塞一檔會爆 |
 | 4 | AC-3（`bh_spy` 外部驗證）為本機閘門而非 CI | §9 Phase 2 AC | `snapshots/` gitignore，CI 無真實快照（見 §6.1） |
-| 5 | 新增 `tests/test_backtest/` 目錄 | §8 測試樹 | §8 的樹未列 `test_backtest/`，但既有 `test_data/` 已對應 `data/`；`bh_spy` 外部驗證非不變量、非模型、非資料，無處可放。沿用「測試目錄對應模組」的既有慣例 |
+| 5 | 新增 `tests/test_backtest/`、`tests/test_portfolio/`、`tests/test_experiments/` 目錄 | §8 測試樹 | §8 的樹未列這三者，但既有 `test_data/` 已對應 `data/`；策略、合格性、run 落地皆非不變量／模型／資料，無處可放。沿用「測試目錄對應模組」的既有慣例 |
 | 6 | 決策日錨定於 warmup 結束後第一個交易日 | §1.7 未明定 | §1.7 只給間隔未給起點，不定死則 warmup 一改全部決策日位移（見 §2.3.1） |
+| 7 | `Strategy.decide` 加 `event` 參數；cfg 於 `__init__` 綁定 | §6.2 介面 | §6.2 的 `decide(self, view)` 只吃 view，但 §1.7 定義了兩種決策日（選擇日重跑完整權重、曝險檢查日只重算 E(t)），策略必須分辨自己被哪一種叫到，否則 `ew_menu` 會在每個曝險檢查日也做月再平衡、`full` 無法實作 §1.6 的分頻。`decide(view)` 無管道傳此資訊。改為 `decide(view, event)`，`event ∈ {SELECTION, EXPOSURE_CHECK}`；一天同時符合兩者時引擎發 `SELECTION`（完整權重計算為超集動作）。此法可維持 view 為純時間閘門、時鐘語意仍只在 `clock.py` |
+| 8 | `nav.parquet` 增 `turnover` / `cost` 欄 | §7.1 未列欄位 | §6.4 的年化換手率與成本拖累、§11.2 第 5 頁需要（見 §5.1） |
