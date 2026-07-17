@@ -48,3 +48,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra -q"
+markers = [
+    "requires_snapshot: 需要 snapshots/ 下的真實快照；CI 無快照（gitignore）故自動 skip",
+]
