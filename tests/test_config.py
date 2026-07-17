@@ -81,3 +81,19 @@ def test_data_quality_rejects_bad_extreme_return():
     raw["data_quality"]["extreme_return"] = 1.5  # 必須 < 1
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
+
+
+def test_backtest_initial_nav_loaded_and_positive():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.backtest.initial_nav == 1.0
+
+
+def test_backtest_initial_nav_rejects_non_positive(tmp_path):
+    import yaml
+
+    raw = _valid_dict()
+    raw["backtest"]["initial_nav"] = 0.0
+    p = tmp_path / "bad.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValidationError):
+        load_config(p)

@@ -85,9 +85,12 @@ class DataQualityConfig(_Strict):
 
 
 class BacktestConfig(_Strict):
-    """回測範圍（規格 §6）。"""
+    """回測範圍與初始狀態（規格 §6）。"""
 
     start: date
+    initial_nav: float = Field(gt=0)
+    # NAV 為尺度不變：Sharpe/MaxDD/Calmar/換手率皆不受此值影響，僅 nav.parquet 的
+    # 數字大小改變。仍入 config 以維持「參數只在 config」這條明線。
 
 
 class QuantConfig(_Strict):
@@ -107,8 +110,7 @@ class QuantConfig(_Strict):
     def _top_k_within_menu(self) -> QuantConfig:
         if self.signal.top_k > len(self.universe.menu):
             raise ValueError(
-                f"signal.top_k ({self.signal.top_k}) 不可大於選單檔數 "
-                f"({len(self.universe.menu)})"
+                f"signal.top_k ({self.signal.top_k}) 不可大於選單檔數 ({len(self.universe.menu)})"
             )
         return self
 
