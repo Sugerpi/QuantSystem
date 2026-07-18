@@ -60,8 +60,14 @@ def test_manifest_separates_identity_from_created_at(tmp_path):
         metrics={"a": {"sharpe": 1.0}},
     )
     m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
-    assert set(m) == {"identity", "created_at"}
+    assert set(m) == {"identity", "content_hashes", "created_at"}
     assert m["identity"]["config_hash"] == "abc"
+    assert set(m["content_hashes"]) == {
+        "nav.parquet",
+        "weights.parquet",
+        "decisions.parquet",
+        "metrics.json",
+    }
 
 
 def test_all_artifacts_written(tmp_path):

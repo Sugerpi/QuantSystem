@@ -7,7 +7,9 @@ INV-6 是「(config, snapshot_hash, git_commit) 三元組決定**輸出**」，�
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import subprocess
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -15,10 +17,56 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from quantcore.data.hashing import canonical_hash, canonicalize
+
 try:
     QC_VERSION = version("quantcore")
 except PackageNotFoundError:  # pragma: no cover
     QC_VERSION = "unknown"
+
+
+def _json_safe(obj):
+    """把非有限浮點（NaN/inf）換成 None：標準 JSON 無這些字面值，presentation 層
+    （§11）以嚴格 parser 讀取，`NaN` 會被拒。metrics 的比率在無定義時（如無回撤的
+    Calmar）本就該是 null。"""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    return obj
+
+
+def _frame_content_hash(df: pd.DataFrame, sort_cols: list[str]) -> str:
+    """內容 hash（沿用 Phase 1 canonical_hash，設計文件 §5.3）。
+
+    對 canonicalize 後的 DataFrame 內容取 hash，與 parquet 位元編碼無關，故 INV-6
+    比對此 hash 比比對 parquet 位元組穩健——pyarrow/pandas 升級不會誤觸紅燈。
+    canonical_hash 不支援 nullable 擴充型別（見其 docstring），decisions 的
+    band_blocked 為 nullable boolean，故先把擴充型別欄轉 object 交 object 分支。
+    """
+    safe = df.copy()
+    for c in safe.columns:
+        if pd.api.types.is_extension_array_dtype(safe[c].dtype):
+            safe[c] = safe[c].astype(object).where(safe[c].notna(), None)
+    return canonical_hash(canonicalize(safe, sort_cols))
+
+
+def _content_hashes(
+    nav: pd.DataFrame, weights: pd.DataFrame, decisions: pd.DataFrame, metrics: dict
+) -> dict:
+    """四個輸出檔的內容 hash，供 INV-6 以內容（而非 parquet 位元組）驗證可重現性。"""
+    return {
+        "nav.parquet": _frame_content_hash(nav, ["strategy_id", "date"]),
+        "weights.parquet": _frame_content_hash(weights, ["strategy_id", "date", "ticker"]),
+        "decisions.parquet": _frame_content_hash(decisions, ["strategy_id", "decision_date"])
+        if not decisions.empty
+        else hashlib.sha256(b"").hexdigest(),
+        "metrics.json": hashlib.sha256(
+            json.dumps(_json_safe(metrics), sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest(),
+    }
 
 
 def git_commit() -> str:
@@ -67,13 +115,22 @@ def write_artifacts(
     decisions: pd.DataFrame,
     metrics: dict,
 ) -> None:
-    """寫出 §7.1 的 Phase 2 子集（無 model_details/——Phase 2 無模型）。"""
+    """寫出 §7.1 的 Phase 2 子集（無 model_details/——Phase 2 無模型）。
+
+    manifest 三塊（設計文件 §5.2）：identity 為輸入三元組、content_hashes 為輸出
+    內容指紋（與 parquet 位元編碼無關）、created_at 為時間戳。INV-6 比對 content_hashes
+    使可重現性不受 pyarrow 版本影響。
+    """
     (run_dir / "config.yaml").write_text(
         yaml.safe_dump(cfg_dict, sort_keys=True, allow_unicode=True), encoding="utf-8"
     )
     (run_dir / "manifest.json").write_text(
         json.dumps(
-            {"identity": identity, "created_at": created_at},
+            {
+                "identity": identity,
+                "content_hashes": _content_hashes(nav, weights, decisions, metrics),
+                "created_at": created_at,
+            },
             indent=2,
             sort_keys=True,
             ensure_ascii=False,
@@ -84,5 +141,6 @@ def write_artifacts(
     _write_parquet(weights, run_dir / "weights.parquet")
     _write_parquet(decisions, run_dir / "decisions.parquet")
     (run_dir / "metrics.json").write_text(
-        json.dumps(metrics, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8"
+        json.dumps(_json_safe(metrics), indent=2, sort_keys=True, ensure_ascii=False),
+        encoding="utf-8",
     )
