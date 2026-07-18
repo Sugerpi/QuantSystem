@@ -40,3 +40,4 @@ data_quality:                       # §4.3 / §4.5 資料品質門檻
 
 backtest:
   start: 2005-01-03                 # §1.1 建議起點
+  initial_nav: 1.0                  # 尺度不變，不影響任何指標

@@ -145,11 +145,23 @@ run 目錄名含時間戳、manifest 含 `created_at`，兩次跑必然不同，
     "git_commit": "...",
     "quantcore_version": "..."
   },
+  "content_hashes": {
+    "nav.parquet": "...",
+    "weights.parquet": "...",
+    "decisions.parquet": "...",
+    "metrics.json": "..."
+  },
   "created_at": "2026-07-17T14:32:11Z"
 }
 ```
 
-INV-6 測試斷言：兩次跑的 `identity` 相同、四個資料檔逐位元組相同；`created_at` 允許不同。
+`content_hashes` 為輸出的**內容指紋**（沿用 §5.3 的 `canonical_hash`，與 parquet 位元
+編碼無關）。INV-6 測試斷言：兩次跑的 `identity` 與 `content_hashes` 相同、讀回的資料
+`assert_frame_equal` 相同（抓列序、對 parquet 編碼穩健）；`created_at` 允許不同。
+
+> **不比 parquet 位元組**：pyarrow 升級會改變位元編碼卻不改內容，位元比對會因環境
+> 而非真迴歸變紅。故 INV-6 比 `content_hashes`（跨環境穩健）+ `assert_frame_equal`
+> （抓 `canonicalize` 排序會遮蔽的列序不決定性）。此為最終 code review 後的修正。
 
 ### 5.3 決定性寫檔
 
