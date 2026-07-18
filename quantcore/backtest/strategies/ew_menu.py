@@ -21,7 +21,9 @@ class EqualWeightMenu(Strategy):
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
         if event is not DecisionEvent.SELECTION:
             return None
-        elig = eligible_assets(view, self._cfg.universe.menu, self._cfg.universe.min_history_days)
+        elig = eligible_assets(
+            view.prices, self._cfg.universe.menu, self._cfg.universe.min_history_days
+        )
         if not elig:
             return None
         w = 1.0 / len(elig)
