@@ -15,7 +15,7 @@
 |-------|------|---------|------|
 | 0 | 骨架 | ~數天 | ✅ 完成 |
 | 1 | 資料層 | ~1.5 週 | ✅ 完成 |
-| 2 | 回測核心（最關鍵） | ~1-2 週 | ⬜ 未開始 |
+| 2 | 回測核心（最關鍵） | ~1-2 週 | ✅ 完成 |
 | 3 | 訊號與組合層 | ~1 週 | ⬜ 未開始 |
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ⬜ 未開始 |
 | 5 | DCC 與 ERC | ~1 週 | ⬜ 未開始 |
@@ -87,24 +87,50 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ---
 
-## Phase 2 — 回測核心（全案最關鍵階段）　⬜
+## Phase 2 — 回測核心（全案最關鍵階段）　✅
 
 事件時鐘、PointInTimeView、engine、accounting、成本、metrics（先不含 bootstrap）。策略只做 `bh_spy` 與 `ew_menu`。
 
 ### 任務
-- [ ] `backtest/clock.py`（事件時鐘：交易日/決策日/執行日，§1.2）
-- [ ] `backtest/ptview.py`（PointInTimeView，結構性防 look-ahead，INV-1）
-- [ ] `backtest/engine.py`（主迴圈，§6.1）
-- [ ] `backtest/accounting.py`（NAV、漂移、現金計息、成本，§6.1/INV-5）
-- [ ] `backtest/strategy.py`（Strategy 介面 + strategy_id，§6.2）
-- [ ] `backtest/metrics.py`（Sharpe/Sortino/MaxDD/Calmar/turnover）
-- [ ] `bh_spy`、`ew_menu` 策略
-- [ ] INV-1/2/5/6 測試
+- [x] `backtest/clock.py`（事件時鐘：交易日/決策日/執行日，§1.2；決策日錨點見備忘）
+- [x] `backtest/ptview.py`（PointInTimeView，建構時實體切片並凍結，INV-1）
+- [x] `backtest/engine.py`（主迴圈；順序損益→漂移→執行→決策，見備忘）
+- [x] `backtest/accounting.py`（NAV、漂移、現金計息、成本，§6.1/INV-5）
+- [x] `backtest/strategy.py`（Strategy 介面 + strategy_id；`decide(view, event)`，見備忘）
+- [x] `backtest/strategies/`（`bh_spy.py`、`ew_menu.py`，子套件）
+- [x] `backtest/metrics.py`（Sharpe/Sortino/MaxDD/Calmar/turnover，不含 bootstrap）
+- [x] `portfolio/selection.py`（point-in-time 合格性；Phase 3 於此加排序/取 K）
+- [x] `experiments/tracking.py`（run 目錄、manifest identity/created_at、決定性寫檔）
+- [x] `experiments/runner.py`（單次實驗 pipeline + CLI）
+- [x] INV-1/2/5/6 測試（合成迷你快照，CI 可跑）
+
+> 原任務清單只列 `backtest/` 六檔，未列 `experiments/` 與 `portfolio/selection.py`。
+> 但 AC 的 INV-6 隱含 run 落地（§2.1 屬 experiments/），故一併納入。
 
 ### AC
-- [ ] INV-1/2/5/6 測試全綠
-- [ ] 三日手算 golden case 逐日吻合
-- [ ] `bh_spy` 年化報酬與外部來源（portfoliovisualizer）對 SPY 同期吻合（成本/計息差異範圍內）— 端到端體檢
+- [x] INV-1/2/5/6 測試全綠（合成迷你快照）
+- [x] 三日手算 golden case 逐日吻合（`test_accounting.py::test_three_day_golden_case`）
+- [x] `bh_spy` 年化報酬與外部來源吻合 — 引擎自身對快照 SPY 含息總報酬精確到 **0.0000 bps/年**
+      （自執行日、apples-to-apples）；對 portfoliovisualizer 差 7.40 bps/年，由引擎外資料源差異
+      主導。詳見 `docs/phase2-bh-spy-external-check.md`。**此 AC 為本機閘門**（快照 gitignore，CI 無快照）
+
+### Phase 2 實作備忘（與原規劃的差異，共 8 處，詳見設計文件 §10）
+1. **迴圈順序**：§6.1 伪代碼「執行→損益」在回看報酬慣例下與 §1.2 損益歸屬矛盾（新權重會賺到生效前的報酬）。以 §1.2 為準：損益→漂移→執行→決策。由 `test_execution_lag.py` 的行為測試鎖死（變異測試確認：改回 §6.1 順序即紅燈）。
+2. **run 目錄命名** `YYYY-MM-DD_HHMM_<label>`：§7.1 範例含單一策略名，但一 run 涵蓋多策略。
+3. **具體策略置於 `backtest/strategies/` 子套件**：§2.1 只給了介面 `strategy.py`。
+4. **AC-3 為本機閘門**：`snapshots/` gitignore，CI 無真實快照；用 `requires_snapshot` marker 自動 skip。
+5. **新增 `tests/test_backtest/`、`test_portfolio/`、`test_experiments/`**：§8 測試樹未列。
+6. **決策日錨定於 warmup 結束後第一個交易日**：§1.7 只給間隔未給起點。
+7. **`Strategy.decide(view, event)`**：§6.2 的 `decide(view)` 無法分辨選擇日/曝險檢查日（§1.7）。
+8. **`nav.parquet` 增 `turnover`/`cost` 欄**：§6.4 年化換手率與成本拖累、§11.2 第 5 頁需要。
+
+### Phase 2 過程中的 repo 整理（非計畫內，但必要）
+- **formatter 統一為 ruff format，移除 black**：原本 pre-commit 同時掛 black 與 ruff-format、CI 跑 `black --check`，兩者對三元運算子鏈與隱式字串串接的換行意見不同，會互相改寫同一檔案。且 `.git/hooks/` 從未 install。已移除 black（pre-commit/pyproject/CI 一併改為 ruff format）並實際執行 `pre-commit install`。
+
+### 最終 code review 後修正（merge 前）
+- **#1 依賴反向**：`portfolio/selection.py` 原 import `backtest.ptview.PointInTimeView`，違反 `portfolio ← backtest`。改為 `eligible_assets` 收 point-in-time 價格切片 DataFrame，portfolio 不再依賴 backtest 型別。
+- **#2 INV-6 位元比對脆弱**：改為 manifest 存 `content_hashes`（canonical_hash，設計文件 §5.3），INV-6 比內容而非 parquet 位元組（pyarrow 升級不誤觸紅燈）+ `assert_frame_equal` 補列序守護。
+- **#3 metrics.json 可吐非法 `NaN`**：`_json_safe` 把非有限浮點換 null（供 presentation 嚴格 parser）。
 
 ---
 
@@ -199,3 +225,4 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-13：Phase 0 骨架完成（uv 環境、§2.1 目錄樹、pydantic config schema + default.yaml、pytest 7 項全綠、ruff/black、pre-commit、CI workflow）。
 - 2026-07-13：push 至 remote（github.com/Sugerpi/QuantSystem），GitHub Actions CI 首次執行成功。**Phase 0 全部 AC 達成 ✅**。
 - 2026-07-16：Phase 1 資料層完成——provider 介面、四 adapters（yfinance/Tiingo/TwelveData/FRED）、NYSE 日曆、決定性 hash、§4.3 五項驗證、§4.5 三源仲裁、決定性含息調整、快照 CLI。首份真實快照 `snapshots/2026-07-16_20ed09`（20 檔）建立；tests/test_data 全綠（77 項）。過程中：Stooq 失效改用 Twelve Data、移除 DBC、將 yfinance 抖動 adj 改為自建決定性調整以達成 AC-4。**Phase 1 全部 AC 達成 ✅**。
+- 2026-07-18：Phase 2 回測核心完成——事件時鐘、PointInTimeView、accounting、engine、metrics、兩 benchmark 策略、experiments run 落地與 CLI。INV-1/2/5/6 由合成迷你快照鎖死（CI 可跑，以變異測試確認各 INV 有牙齒）；三日手算 golden case 通過；AC-3 端到端體檢——引擎自身對快照 SPY 含息總報酬精確到 0.0000 bps/年，對 portfoliovisualizer 差 7.40 bps/年（資料源差異主導）。全套 135 項綠（含 2 項本機快照測試）。8 處規格偏離見上方備忘。過程中整理：formatter 統一為 ruff format 並移除互相衝突的 black、實際安裝 pre-commit hook。最終 code review（opus）抓到 3 項並於 merge 前修正（依賴反向、INV-6 位元比對脆弱、metrics NaN），詳見上方備忘。**Phase 2 全部 AC 達成 ✅**。
