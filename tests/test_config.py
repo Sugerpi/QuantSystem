@@ -100,20 +100,13 @@ def test_backtest_initial_nav_rejects_non_positive(tmp_path):
 
 
 def test_rolling_std_vol_model_and_window_load():
-    from quantcore.config import load_config
-
-    cfg = load_config("quantcore/config/default.yaml")
+    cfg = load_config(DEFAULT_YAML)
     assert cfg.risk.vol_model == "rolling_std"
     assert cfg.risk.vol_window == 63
 
 
 def test_vol_window_must_be_positive():
-    import pytest
-    from pydantic import ValidationError
-
-    from quantcore.config import QuantConfig, load_config
-
-    raw = load_config("quantcore/config/default.yaml").model_dump(mode="json")
+    raw = _valid_dict()
     raw["risk"]["vol_window"] = 0
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
