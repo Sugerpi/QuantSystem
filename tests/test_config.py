@@ -20,7 +20,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.signal.momentum_lookback == 252
     assert cfg.signal.momentum_skip == 21
     assert cfg.risk.vol_target_annual == 0.10
-    assert cfg.risk.vol_model == "garch_arch"
+    assert cfg.risk.vol_model == "rolling_std"
     assert cfg.backtest.start == date(2005, 1, 3)
     assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
@@ -97,3 +97,23 @@ def test_backtest_initial_nav_rejects_non_positive(tmp_path):
     p.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+def test_rolling_std_vol_model_and_window_load():
+    from quantcore.config import load_config
+
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_window == 63
+
+
+def test_vol_window_must_be_positive():
+    import pytest
+    from pydantic import ValidationError
+
+    from quantcore.config import QuantConfig, load_config
+
+    raw = load_config("quantcore/config/default.yaml").model_dump(mode="json")
+    raw["risk"]["vol_window"] = 0
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)

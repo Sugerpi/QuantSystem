@@ -13,7 +13,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-VolModel = Literal["garch_arch", "garch_own", "ewma"]
+VolModel = Literal["garch_arch", "garch_own", "ewma", "rolling_std"]
 CorrModel = Literal["dcc", "ewma"]
 
 
@@ -58,6 +58,9 @@ class RiskConfig(_Strict):
     vol_target_annual: float = Field(gt=0)
     exposure_band: float = Field(ge=0, le=1)
     exposure_min: float = Field(ge=0, le=1)
+    vol_window: int = Field(
+        gt=0
+    )  # rolling_std 的滾動窗（交易日）；Phase 4 GARCH 取代後仍保留供 EWMA/基線
 
 
 class ScheduleConfig(_Strict):
