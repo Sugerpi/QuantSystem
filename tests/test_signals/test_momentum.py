@@ -27,8 +27,11 @@ def test_asset_with_too_few_bars_is_omitted():
 
 def test_multiple_tickers_scored_independently():
     dates = make_dates(6)
-    snap = make_snapshot({"UP": [10, 10, 10, 10, 10, 20], "DOWN": [20, 20, 20, 20, 20, 10]}, dates)
+    snap = make_snapshot(
+        {"UP": [10.0, 10.0, 10.0, 10.0, 20.0, 25.0], "DOWN": [20.0, 20.0, 20.0, 20.0, 10.0, 5.0]},
+        dates,
+    )
     out = cross_sectional_momentum(snap["prices"], lookback=4, skip=1)
-    # skip=1 → 用 s[-2]（尚未反映最後一天跳動），兩檔 s[-2]/s[-5] 皆為 1.0 → 0.0
-    assert out["UP"] == 0.0
-    assert out["DOWN"] == 0.0
+    # skip=1 → 用 s[-2]（第 5 天），不受最後一天影響
+    assert out["UP"] == 20.0 / 10.0 - 1.0  # +1.0
+    assert out["DOWN"] == 10.0 / 20.0 - 1.0  # -0.5
