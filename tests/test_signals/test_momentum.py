@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from quantcore.signals.momentum import cross_sectional_momentum
+from quantcore.signals.momentum import absolute_momentum, cross_sectional_momentum
 from tests.fixtures.synthetic import make_dates, make_snapshot
 
 
@@ -35,3 +35,23 @@ def test_multiple_tickers_scored_independently():
     # skip=1 → 用 s[-2]（第 5 天），不受最後一天影響
     assert out["UP"] == 20.0 / 10.0 - 1.0  # +1.0
     assert out["DOWN"] == 10.0 / 20.0 - 1.0  # -0.5
+
+
+def test_absmom_pass_when_return_beats_tbill():
+    # dtb3=2.52% → 日利率 0.0001；lookback=4 → tbill_cum≈(1.0001)^4-1≈0.0004
+    dates = make_dates(5)
+    snap = make_snapshot(
+        {"UP": [10.0, 10.0, 10.0, 10.0, 11.0], "DOWN": [10.0, 10.0, 10.0, 10.0, 9.0]},
+        dates,
+        dtb3_percent=2.52,
+    )
+    out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
+    assert out["UP"] is True  # TR=+0.10 > tbill
+    assert out["DOWN"] is False  # TR=-0.10 < tbill
+
+
+def test_absmom_omits_short_history():
+    dates = make_dates(5)
+    snap = make_snapshot({"SHORT": [1.0, 2.0, 3.0]}, dates)
+    out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
+    assert "SHORT" not in out

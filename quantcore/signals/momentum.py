@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+
+_DAYS_PER_YEAR = 252
 
 
 def cross_sectional_momentum(prices: pd.DataFrame, lookback: int, skip: int) -> dict[str, float]:
@@ -21,4 +24,24 @@ def cross_sectional_momentum(prices: pd.DataFrame, lookback: int, skip: int) -> 
         if len(s) < lookback + 1:
             continue
         out[ticker] = float(s[-1 - skip] / s[-1 - lookback] - 1.0)
+    return out
+
+
+def absolute_momentum(prices: pd.DataFrame, rates: pd.DataFrame, lookback: int) -> dict[str, bool]:
+    """時間序列動量（§1.4）：過去 lookback 日總報酬是否勝過同期 T-bill 累積。
+
+    tbill 累積：DTB3（年化 %）→ 日利率（÷100 ÷252），取 ≤ t 的末 lookback 日複利。
+    所有資產共用同一 t，故 tbill 窗只算一次。bar 不足者略過（與動量一致）。
+    """
+    r = rates.sort_values("date")["DTB3"].to_numpy() / 100.0 / _DAYS_PER_YEAR
+    daily = r[-lookback:]
+    tbill_cum = float(np.prod(1.0 + daily) - 1.0)
+
+    out: dict[str, bool] = {}
+    for ticker, g in prices.groupby("ticker", sort=True):
+        s = g.sort_values("date")["adj_close"].to_numpy()
+        if len(s) < lookback + 1:
+            continue
+        tr = float(s[-1] / s[-1 - lookback] - 1.0)
+        out[ticker] = bool(tr - tbill_cum > 0.0)
     return out
