@@ -22,7 +22,7 @@ class MomentumInverseVol(MomentumStrategy):
         model = self._cfg.risk.vol_model
         window = self._cfg.risk.vol_window
         sigma_hat = {
-            t: estimate_annualized_vol(model, view.history(t)["adj_close"], window)
-            for t in selected
+            ticker: estimate_annualized_vol(model, view.history(ticker)["adj_close"], window)
+            for ticker in selected
         }
         return inverse_vol(sigma_hat), sigma_hat

@@ -92,3 +92,9 @@ def test_mom_ivol_weights_are_inverse_vol():
         assert d.target_weights["WIN"] < d.target_weights["MID"]
     else:
         assert d.target_weights["WIN"] > d.target_weights["MID"]
+
+    from quantcore.portfolio.weighting import inverse_vol
+
+    expected = inverse_vol(d.diagnostics.sigma_hat)
+    for ticker, w in expected.items():
+        assert d.target_weights[ticker] == pytest.approx(w)
