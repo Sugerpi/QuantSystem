@@ -1,6 +1,7 @@
 """橫斷面與絕對動量（規格 §1.3、§1.4）。"""
 
 import numpy as np
+import pytest
 
 from quantcore.signals.momentum import absolute_momentum, cross_sectional_momentum
 from tests.fixtures.synthetic import make_dates, make_snapshot
@@ -51,10 +52,31 @@ def test_absmom_pass_when_return_beats_tbill():
 
 
 def test_absmom_omits_short_history():
-    dates = make_dates(5)
-    snap = make_snapshot({"SHORT": [1.0, 2.0, 3.0]}, dates)
+    dates = make_dates(6)
+    snap = make_snapshot(
+        {"LONG": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0], "SHORT": [1.0, 2.0, 3.0]}, dates
+    )
     out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
-    assert "SHORT" not in out
+    assert "SHORT" not in out  # 3 bars < lookback+1 → 略過
+    assert "LONG" in out
+
+
+def test_absmom_ffills_nan_dtb3_in_window():
+    # DTB3 中間有一個 NaN（模擬 FRED '.' 缺值）落在窗內；reindex+ffill 應補上，
+    # 不因單一缺值把資產判為 fail（舊的 raw r[-lookback:] 會讓 tbill_cum=NaN → 全 fail）。
+    dates = make_dates(6)
+    snap = make_snapshot({"UP": [10.0, 10.0, 10.0, 10.0, 10.0, 11.0]}, dates, dtb3_percent=2.52)
+    snap["rates"].loc[2, "DTB3"] = float("nan")
+    out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
+    assert out["UP"] is True  # TR=+0.10 仍勝過 ffill 後 ~0.0004 的 hurdle
+
+
+def test_absmom_raises_when_all_dtb3_nan():
+    dates = make_dates(6)
+    snap = make_snapshot({"UP": [10.0, 10.0, 10.0, 10.0, 10.0, 11.0]}, dates)
+    snap["rates"]["DTB3"] = float("nan")
+    with pytest.raises(ValueError):
+        absolute_momentum(snap["prices"], snap["rates"], lookback=4)
 
 
 def test_absmom_uses_tbill_hurdle_not_just_positive_return():

@@ -30,18 +30,26 @@ def cross_sectional_momentum(prices: pd.DataFrame, lookback: int, skip: int) -> 
 def absolute_momentum(prices: pd.DataFrame, rates: pd.DataFrame, lookback: int) -> dict[str, bool]:
     """時間序列動量（§1.4）：過去 lookback 日總報酬是否勝過同期 T-bill 累積。
 
-    tbill 累積：DTB3（年化 %）→ 日利率（÷100 ÷252），取 ≤ t 的末 lookback 日複利。
-    所有資產共用同一 t，故 tbill 窗只算一次。bar 不足者略過（與動量一致）。
+    DTB3 為 FRED 聯邦營業日索引，與 NYSE 交易日曆不同步。此處比照 engine._daily_rates
+    的慣例，把 DTB3 reindex 到價格的交易日軸並 ffill/bfill，使 tbill 窗與資產報酬窗落在
+    同一組交易日；否則兩者只共用端點、不共用起點與中間日集。
 
-    前置條件：rates 至少含 lookback 日；每檔資產末根對齊 rates 末日 t（由上游 eligibility 保證，
-    故所有資產共用同一 tbill 窗）；DTB3 已 ffill 假日（資料層職責，§1.5）。窗內若有 NaN，
-    tbill_cum 為 NaN、所有資產判為 fail——此情形應由資料層驗證擋下（§4.3）。
+    前置條件：所有資產末根對齊交易日末日 t（由上游 eligibility 保證，故 tbill 窗只算一次）。
+    交易日不足 lookback、或窗內在 reindex+ffill+bfill 後仍為 NaN（DTB3 全空）時明確拋錯，
+    而非靜默把全部部位轉現金。
     """
-    r = rates.sort_values("date")["DTB3"].to_numpy() / 100.0 / _DAYS_PER_YEAR
-    daily = r[-lookback:]
-    if len(daily) < lookback:
-        raise ValueError(f"rates 不足 {lookback} 日，無法對齊絕對動量窗（僅 {len(daily)} 日）")
-    tbill_cum = float(np.prod(1.0 + daily) - 1.0)
+    trading_days = pd.DatetimeIndex(sorted(prices["date"].unique()))
+    daily_rate = (
+        rates.set_index("date")["DTB3"].reindex(trading_days).ffill().bfill()
+        / 100.0
+        / _DAYS_PER_YEAR
+    ).to_numpy()
+    window = daily_rate[-lookback:]
+    if len(window) < lookback:
+        raise ValueError(f"交易日不足 {lookback} 日，無法對齊絕對動量窗（僅 {len(window)} 日）")
+    if not np.isfinite(window).all():
+        raise ValueError("DTB3 窗內含 NaN（reindex+ffill/bfill 後仍缺），無法計算絕對動量 hurdle")
+    tbill_cum = float(np.prod(1.0 + window) - 1.0)
 
     out: dict[str, bool] = {}
     for ticker, g in prices.groupby("ticker", sort=True):
