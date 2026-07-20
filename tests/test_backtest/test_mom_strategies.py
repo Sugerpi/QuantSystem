@@ -1,5 +1,7 @@
 """動量策略（規格 §1.3/§1.4/§6.3）。以 decide() 直接驗證，避開 clock 設置。"""
 
+import pytest
+
 from quantcore.backtest.ptview import make_view
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.backtest.strategy import DecisionEvent
@@ -71,3 +73,22 @@ def test_mom_only_routes_absmom_failure_to_cash():
     assert d.target_weights["WIN"] == 0.5  # 原配額保留，未重新歸一
     assert d.target_weights["CASH"] == 0.5  # CRASH 的 0.5 轉入現金
     assert sum(d.target_weights.values()) == 1.0  # 權重守恆（INV-5）
+
+
+def test_mom_ivol_weights_are_inverse_vol():
+    dates = make_dates(6)
+    cfg = make_cfg(["WIN", "MID", "LOSE"], **_CFG_KW)
+    strat = STRATEGIES["mom_ivol"](cfg)
+    d = strat.decide(make_view(_snap(dates), dates[-1]), DecisionEvent.SELECTION)
+    assert set(d.diagnostics.selected) == {"WIN", "MID"}
+    assert d.diagnostics.sigma_hat is not None
+    assert set(d.diagnostics.sigma_hat) == {"WIN", "MID"}
+    # 兩檔皆通過 absmom → 風險部位權重和 = 1
+    assert sum(d.target_weights[t] for t in d.diagnostics.selected) == pytest.approx(1.0)
+    # inverse-vol：波動較低者權重較高
+    win_vol = d.diagnostics.sigma_hat["WIN"]
+    mid_vol = d.diagnostics.sigma_hat["MID"]
+    if win_vol > mid_vol:
+        assert d.target_weights["WIN"] < d.target_weights["MID"]
+    else:
+        assert d.target_weights["WIN"] > d.target_weights["MID"]

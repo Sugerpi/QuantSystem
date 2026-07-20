@@ -2,6 +2,7 @@
 
 from quantcore.backtest.strategies.bh_spy import BuyHoldSPY
 from quantcore.backtest.strategies.ew_menu import EqualWeightMenu
+from quantcore.backtest.strategies.mom_ivol import MomentumInverseVol
 from quantcore.backtest.strategies.mom_only import MomentumOnly
 from quantcore.backtest.strategies.sixty_forty import SixtyForty
 
@@ -10,6 +11,14 @@ STRATEGIES = {
     EqualWeightMenu.strategy_id: EqualWeightMenu,
     SixtyForty.strategy_id: SixtyForty,
     MomentumOnly.strategy_id: MomentumOnly,
+    MomentumInverseVol.strategy_id: MomentumInverseVol,
 }
 
-__all__ = ["STRATEGIES", "BuyHoldSPY", "EqualWeightMenu", "SixtyForty", "MomentumOnly"]
+__all__ = [
+    "STRATEGIES",
+    "BuyHoldSPY",
+    "EqualWeightMenu",
+    "SixtyForty",
+    "MomentumOnly",
+    "MomentumInverseVol",
+]
