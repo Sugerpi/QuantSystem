@@ -10,24 +10,30 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import sys
 from pathlib import Path
 
 import pandas as pd
+from pydantic import ValidationError
 
 from quantcore.backtest.clock import EventClock
 from quantcore.backtest.engine import run_strategy
 from quantcore.backtest.metrics import compute_metrics
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.config import QuantConfig, load_config
+from quantcore.data.hashing import config_hash
 from quantcore.data.snapshot import load_snapshot
-from quantcore.experiments.tracking import create_run_dir
+from quantcore.experiments.tracking import QC_VERSION, create_run_dir, git_commit
 
 _DAYS_PER_YEAR = 252
 
 
 def _apply_override(raw: dict, dotted_key: str, value) -> dict:
-    """回傳套用單一 'section.field' 覆寫後的 config dict 副本。"""
+    """回傳套用單一 'section.field' 覆寫後的 config dict 副本。
+
+    假設 key 為兩層 'section.field'（split(".", 1)）；深巢狀 key 不在支援範圍。
+    """
     out = copy.deepcopy(raw)
     section, field = dotted_key.split(".", 1)
     out[section][field] = value
@@ -75,6 +81,29 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
     return result
 
 
+def _write_manifest(
+    run_dir: Path,
+    base_cfg: QuantConfig,
+    snapshot: dict,
+    strategy_ids: list[str],
+    param_grid: dict[str, list],
+    failed_cells: list[dict],
+) -> None:
+    """落盤 provenance（INV-6）：讓比較表可回溯到 config/snapshot/commit + 記錄失敗格。"""
+    manifest = {
+        "snapshot_id": snapshot["manifest"]["snapshot_id"],
+        "git_commit": git_commit(),
+        "config_hash": config_hash(base_cfg.model_dump(mode="json")),
+        "quantcore_version": QC_VERSION,
+        "strategy_ids": list(strategy_ids),
+        "param_grid": param_grid,
+        "failed_cells": failed_cells,
+    }
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
 def run_ablation(
     base_cfg: QuantConfig,
     snapshot: dict,
@@ -84,19 +113,34 @@ def run_ablation(
     label: str,
     now: pd.Timestamp | None = None,
 ) -> Path:
-    """跑消融矩陣並寫出單一比較表，回傳 run 目錄。"""
-    now = pd.Timestamp.now() if now is None else now
-    base_raw = base_cfg.model_dump(mode="json")
+    """跑消融矩陣並寫出單一比較表 + manifest，回傳 run 目錄。
 
-    rows = []
+    單格 config 驗證失敗只記錄並略過（跟得上多少跑多少），不拖垮整批。
+    """
+    now = pd.Timestamp.now() if now is None else now
+    if not strategy_ids:
+        raise ValueError("strategy_ids 不可為空")
+    unknown = [s for s in strategy_ids if s not in STRATEGIES]
+    if unknown:
+        raise ValueError(f"未知策略 {unknown}；可用：{sorted(STRATEGIES)}")
+
+    base_raw = base_cfg.model_dump(mode="json")
+    rows: list[dict] = []
+    failed_cells: list[dict] = []
     for cell_label, cfg_dict in _build_cells(base_raw, param_grid):
-        cfg = QuantConfig.model_validate(cfg_dict)
+        try:
+            cfg = QuantConfig.model_validate(cfg_dict)
+        except ValidationError as e:
+            failed_cells.append({"cell_label": cell_label, "error": f"{type(e).__name__}: {e}"})
+            print(f"[消融] 略過無效格 {cell_label!r}：{type(e).__name__}")
+            continue
         for sid, metrics in _evaluate(cfg, snapshot, strategy_ids).items():
             rows.append({"cell_label": cell_label, "strategy_id": sid, **metrics})
 
     table = pd.DataFrame(rows)
     run_dir = create_run_dir(out_root, f"{label}_ablation", now)
     table.to_parquet(run_dir / "comparison.parquet", index=False)
+    _write_manifest(run_dir, base_cfg, snapshot, strategy_ids, param_grid, failed_cells)
     _print_summary(table)
     return run_dir
 
