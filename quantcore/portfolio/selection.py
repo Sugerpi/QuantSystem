@@ -23,6 +23,10 @@ def eligible_assets(prices: pd.DataFrame, menu: list[str], min_history_days: int
 
 
 def select_top_k(momentum_scores: dict[str, float], k: int) -> list[str]:
-    """依分數降序取前 K；平手以 ticker 字母序（決定性，§1.3）。"""
+    """依分數降序取前 K；平手以 ticker 字母序（決定性，§1.3）。
+
+    前置條件：分數須為有限值。NaN 會使排序次序未定義（違反 INV-6），
+    呼叫端（策略）只應傳入算得出動量的資產分數。
+    """
     ranked = sorted(momentum_scores.items(), key=lambda kv: (-kv[1], kv[0]))
     return [ticker for ticker, _ in ranked[:k]]

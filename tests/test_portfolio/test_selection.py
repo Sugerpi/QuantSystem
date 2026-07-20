@@ -53,8 +53,10 @@ def test_select_top_k_by_score_desc():
 
 
 def test_select_top_k_tie_broken_by_ticker_alpha():
-    scores = {"A": 0.3, "C": 0.3, "D": 0.2, "B": 0.1}
-    # A 與 C 同分 0.3 → 字母序 A 先；取 2 → ["A", "C"]
+    # 刻意把同分的 C 排在 A 前面插入：唯有「以 ticker 升序」平手規則才會得到 [A, C]。
+    # 若拿掉 tie-break（sort 為 stable），會保留插入序回傳 [C, A] → 測試失敗，
+    # 故此測試真的守得住 INV-6。
+    scores = {"C": 0.3, "A": 0.3, "D": 0.2, "B": 0.1}
     assert select_top_k(scores, k=2) == ["A", "C"]
 
 
