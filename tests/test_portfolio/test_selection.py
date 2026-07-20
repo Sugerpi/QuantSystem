@@ -3,7 +3,7 @@
 import numpy as np
 
 from quantcore.backtest.ptview import make_view
-from quantcore.portfolio.selection import eligible_assets
+from quantcore.portfolio.selection import eligible_assets, select_top_k
 from tests.fixtures.synthetic import make_dates, make_snapshot
 
 MENU = ["SPY", "QQQ", "LATE"]
@@ -45,3 +45,19 @@ def test_ticker_absent_from_snapshot_is_not_eligible():
     snap, dates = _snap()
     v = make_view(snap, dates[-1])
     assert eligible_assets(v.prices, ["SPY", "NOPE"], min_history_days=5) == ["SPY"]
+
+
+def test_select_top_k_by_score_desc():
+    scores = {"A": 0.1, "B": 0.5, "C": 0.3}
+    assert select_top_k(scores, k=2) == ["B", "C"]
+
+
+def test_select_top_k_tie_broken_by_ticker_alpha():
+    scores = {"A": 0.3, "C": 0.3, "D": 0.2, "B": 0.1}
+    # A 與 C 同分 0.3 → 字母序 A 先；取 2 → ["A", "C"]
+    assert select_top_k(scores, k=2) == ["A", "C"]
+
+
+def test_select_top_k_caps_at_available():
+    scores = {"A": 0.3, "B": 0.1}
+    assert select_top_k(scores, k=5) == ["A", "B"]

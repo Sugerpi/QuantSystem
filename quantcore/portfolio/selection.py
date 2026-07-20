@@ -20,3 +20,9 @@ def eligible_assets(prices: pd.DataFrame, menu: list[str], min_history_days: int
     """
     counts = prices["ticker"].value_counts()
     return sorted(t for t in menu if int(counts.get(t, 0)) >= min_history_days)
+
+
+def select_top_k(momentum_scores: dict[str, float], k: int) -> list[str]:
+    """依分數降序取前 K；平手以 ticker 字母序（決定性，§1.3）。"""
+    ranked = sorted(momentum_scores.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [ticker for ticker, _ in ranked[:k]]
