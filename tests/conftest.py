@@ -24,5 +24,9 @@ def real_snapshot_dir() -> Path:
 def pytest_runtest_setup(item):
     if "requires_snapshot" in item.keywords:
         d = Path(load_config(CONFIG_YAML).snapshot)
-        if not (d / "MANIFEST.json").exists():
-            pytest.skip(f"無真實快照（{d}）——CI 環境預期如此")
+        # MANIFEST/metadata 進版控（快照 hash/provenance，Phase 1 決定），但 parquet 資料
+        # gitignore。CI 只有 manifest、無 parquet，故以「資料檔是否齊全」判定 skip，而非
+        # MANIFEST 是否存在——否則 CI 會誤判快照存在，於 load_snapshot 時 FileNotFoundError。
+        missing = [f for f in ("prices.parquet", "rates.parquet") if not (d / f).exists()]
+        if missing:
+            pytest.skip(f"快照資料缺席（缺 {', '.join(missing)}，{d}）——CI 無 parquet，預期如此")
