@@ -112,8 +112,16 @@ def test_vol_window_must_be_positive():
         QuantConfig.model_validate(raw)
 
 
-def test_vol_window_must_not_exceed_momentum_lookback():
+def test_vol_window_exceeding_available_history_rejected():
     raw = _valid_dict()
-    raw["risk"]["vol_window"] = raw["signal"]["momentum_lookback"] + 1
+    floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
+    raw["risk"]["vol_window"] = floor  # vol_window+1 > floor → 無法滿窗
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
+
+
+def test_vol_window_at_available_floor_accepted():
+    raw = _valid_dict()
+    floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
+    raw["risk"]["vol_window"] = floor - 1  # 剛好滿窗 → 應通過
+    QuantConfig.model_validate(raw)  # 不應拋錯

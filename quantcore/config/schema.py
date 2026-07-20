@@ -118,12 +118,15 @@ class QuantConfig(_Strict):
         return self
 
     @model_validator(mode="after")
-    def _vol_window_within_lookback(self) -> QuantConfig:
-        if self.risk.vol_window > self.signal.momentum_lookback:
+    def _vol_window_fits_available_history(self) -> QuantConfig:
+        # 入選資產至少有 max(min_history_days, momentum_lookback+1) 根 bar
+        # （須同時通過 eligibility 與動量計分）。滿窗需 vol_window+1 根，
+        # 此約束確保滾動波動窗永遠為滿窗、不致靜默退化為較少樣本。
+        floor = max(self.universe.min_history_days, self.signal.momentum_lookback + 1)
+        if self.risk.vol_window + 1 > floor:
             raise ValueError(
-                f"risk.vol_window ({self.risk.vol_window}) 不可大於 "
-                f"signal.momentum_lookback ({self.signal.momentum_lookback})："
-                "入選資產至少有 lookback+1 根 bar，此約束確保滾動波動窗永遠算得出"
+                f"risk.vol_window ({self.risk.vol_window}) 過大：入選資產最少 {floor} 根 bar，"
+                f"滾動波動窗需 vol_window+1 根，將無法滿窗"
             )
         return self
 
