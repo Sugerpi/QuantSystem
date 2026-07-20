@@ -7,7 +7,7 @@ from quantcore.backtest.ptview import make_view
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.backtest.strategy import DecisionEvent
 from quantcore.config import load_config
-from tests.fixtures.synthetic import make_dates, make_snapshot
+from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
 
 CONFIG_YAML = "quantcore/config/default.yaml"
 
@@ -82,3 +82,22 @@ def test_ew_menu_returns_none_when_nothing_eligible():
     snap, dates = _snap()
     s = STRATEGIES["ew_menu"](cfg)
     assert s.decide(make_view(snap, dates[-1]), DecisionEvent.SELECTION) is None
+
+
+def test_sixty_forty_targets_60_40():
+    dates = make_dates(10)
+    snap = make_snapshot(
+        {"SPY": [100.0 + i for i in range(10)], "IEF": [50.0 + i for i in range(10)]}, dates
+    )
+    cfg = make_cfg(["SPY", "IEF"], signal={"top_k": 2})
+    strat = STRATEGIES["sixty_forty"](cfg)
+    d = strat.decide(make_view(snap, dates[-1]), DecisionEvent.SELECTION)
+    assert d.target_weights == {"SPY": 0.6, "IEF": 0.4, "CASH": 0.0}
+
+
+def test_sixty_forty_no_action_on_exposure_check():
+    dates = make_dates(10)
+    snap = make_snapshot({"SPY": [100.0 + i for i in range(10)]}, dates)
+    cfg = make_cfg(["SPY", "IEF"], signal={"top_k": 2})
+    strat = STRATEGIES["sixty_forty"](cfg)
+    assert strat.decide(make_view(snap, dates[-1]), DecisionEvent.EXPOSURE_CHECK) is None

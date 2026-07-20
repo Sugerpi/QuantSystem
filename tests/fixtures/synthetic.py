@@ -48,3 +48,17 @@ def make_snapshot(
         "metadata": {"tickers": {}, "overrides": [], "sources": {}},
         "manifest": {"snapshot_id": "synthetic", "content_hashes": {}},
     }
+
+
+def make_cfg(menu: list[str], **overrides: dict):
+    """由 default.yaml 生一份測試 config，套用巢狀覆寫後重新驗證。
+
+    overrides 以巢狀 dict 給，如 make_cfg(["SPY"], signal={"top_k": 2}).
+    """
+    from quantcore.config import QuantConfig, load_config
+
+    raw = load_config("quantcore/config/default.yaml").model_dump(mode="json")
+    raw["universe"]["menu"] = list(menu)
+    for section, values in overrides.items():
+        raw[section].update(values)
+    return QuantConfig.model_validate(raw)

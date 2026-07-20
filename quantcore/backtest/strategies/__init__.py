@@ -2,10 +2,12 @@
 
 from quantcore.backtest.strategies.bh_spy import BuyHoldSPY
 from quantcore.backtest.strategies.ew_menu import EqualWeightMenu
+from quantcore.backtest.strategies.sixty_forty import SixtyForty
 
 STRATEGIES = {
     BuyHoldSPY.strategy_id: BuyHoldSPY,
     EqualWeightMenu.strategy_id: EqualWeightMenu,
+    SixtyForty.strategy_id: SixtyForty,
 }
 
-__all__ = ["STRATEGIES", "BuyHoldSPY", "EqualWeightMenu"]
+__all__ = ["STRATEGIES", "BuyHoldSPY", "EqualWeightMenu", "SixtyForty"]
