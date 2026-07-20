@@ -110,3 +110,10 @@ def test_vol_window_must_be_positive():
     raw["risk"]["vol_window"] = 0
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
+
+
+def test_vol_window_must_not_exceed_momentum_lookback():
+    raw = _valid_dict()
+    raw["risk"]["vol_window"] = raw["signal"]["momentum_lookback"] + 1
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)

@@ -117,6 +117,16 @@ class QuantConfig(_Strict):
             )
         return self
 
+    @model_validator(mode="after")
+    def _vol_window_within_lookback(self) -> QuantConfig:
+        if self.risk.vol_window > self.signal.momentum_lookback:
+            raise ValueError(
+                f"risk.vol_window ({self.risk.vol_window}) 不可大於 "
+                f"signal.momentum_lookback ({self.signal.momentum_lookback})："
+                "入選資產至少有 lookback+1 根 bar，此約束確保滾動波動窗永遠算得出"
+            )
+        return self
+
 
 def load_config(path: str | Path) -> QuantConfig:
     """從 YAML 載入並驗證 config。
