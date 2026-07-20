@@ -51,9 +51,12 @@ def make_snapshot(
 
 
 def make_cfg(menu: list[str], **overrides: dict):
-    """由 default.yaml 生一份測試 config，套用巢狀覆寫後重新驗證。
+    """由 default.yaml 生一份測試 config，套用覆寫後重新驗證。
 
-    overrides 以巢狀 dict 給，如 make_cfg(["SPY"], signal={"top_k": 2}).
+    overrides 以「區塊 dict」給，如 make_cfg(["SPY"], signal={"top_k": 2})；
+    只支援 dict 型別的區塊（signal/risk/universe/... ），一層淺合併（非遞迴）。
+    便利性：套用 menu 與 overrides 後，top_k 會夾到 ≤ 選單檔數，讓小型合成選單
+    不必每次都手動覆寫 top_k 也能通過 schema 驗證。
     """
     from quantcore.config import QuantConfig, load_config
 
@@ -61,4 +64,5 @@ def make_cfg(menu: list[str], **overrides: dict):
     raw["universe"]["menu"] = list(menu)
     for section, values in overrides.items():
         raw[section].update(values)
+    raw["signal"]["top_k"] = min(raw["signal"]["top_k"], len(raw["universe"]["menu"]))
     return QuantConfig.model_validate(raw)
