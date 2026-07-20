@@ -14,6 +14,8 @@ def inverse_vol(sigma_hat: dict[str, float]) -> dict[str, float]:
     σ̂ 須為正且有限。Phase 3 的 rolling_std 在資料退化時可能回 NaN，
     若放行會靜默污染權重——故此處明確拋錯（呼應 vol 派發的誠實失敗設計）。
     """
+    if not sigma_hat:
+        raise ValueError("inverse_vol 收到空的 sigma_hat（呼叫端應先保證有入選資產）")
     for t, s in sigma_hat.items():
         if not math.isfinite(s) or s <= 0.0:
             raise ValueError(f"σ̂[{t}]={s} 非正或非有限，無法計算 inverse-vol")
@@ -24,6 +26,8 @@ def inverse_vol(sigma_hat: dict[str, float]) -> dict[str, float]:
 
 def equal_weight(assets: list[str]) -> dict[str, float]:
     """入選資產等權，Σ w = 1。"""
+    if not assets:
+        raise ValueError("equal_weight 收到空的資產清單（呼叫端應先保證有入選資產）")
     w = 1.0 / len(assets)
     return {t: w for t in assets}
 
