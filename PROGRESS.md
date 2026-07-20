@@ -16,7 +16,7 @@
 | 0 | 骨架 | ~數天 | ✅ 完成 |
 | 1 | 資料層 | ~1.5 週 | ✅ 完成 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ✅ 完成 |
-| 3 | 訊號與組合層 | ~1 週 | ⬜ 未開始 |
+| 3 | 訊號與組合層 | ~1 週 | ✅ 完成 |
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ⬜ 未開始 |
 | 5 | DCC 與 ERC | ~1 週 | ⬜ 未開始 |
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ⬜ 未開始 |
@@ -134,20 +134,28 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ---
 
-## Phase 3 — 訊號與組合層　⬜
+## Phase 3 — 訊號與組合層　✅
 
 動量、絕對動量、選擇、inverse-vol（波動率暫用 63 日滾動標準差）、`mom_only` 與 `mom_ivol` 策略。
 
 ### 任務
-- [ ] `signals/momentum.py`（12-1 橫斷面 + 絕對動量，純函數，§1.3/§1.4）
-- [ ] `portfolio/selection.py`（排序、取 K、平手規則、point-in-time 合格性）
-- [ ] `portfolio/weighting.py`（inverse-vol）
-- [ ] Diagnostics 落盤（§6.2，decisions.parquet）
-- [ ] `mom_only`、`mom_ivol` 策略
+- [x] `signals/momentum.py`（12-1 橫斷面 + 絕對動量，純函數，§1.3/§1.4）
+- [x] `portfolio/selection.py`（排序、取 K、平手規則、point-in-time 合格性）
+- [x] `portfolio/weighting.py`（inverse-vol）
+- [x] Diagnostics 落盤（§6.2，decisions.parquet）
+- [x] `mom_only`、`mom_ivol` 策略
 
 ### AC
-- [ ] 消融跑得動並產出比較表
-- [ ] 決策 diagnostics 完整落盤
+- [x] 消融跑得動並產出比較表
+- [x] 決策 diagnostics 完整落盤
+
+### Phase 3 實作備忘（與原規劃的差異）
+1. **`vol_model` 暫設 `rolling_std`**：規格 §7.2 config 範例為 `garch_arch`，但 Phase 3 尚無 GARCH。新增 `rolling_std`（63 日滾動標準差，`risk.vol_window`）作為 inverse-vol 的波動來源；`default.yaml` 暫設 `vol_model: rolling_std`，Phase 4 GARCH 到位後翻回 `garch_arch`。vol 派發對未實作模型丟 `NotImplementedError`（誠實失敗）。
+2. **順手建 `sixty_forty`**：§6.3 有此基準但原不在 Phase 3 任務清單；因與訊號層無關且極便宜，一併建立，讓消融比較表多一個傳統配置基準。
+3. **絕對動量回看窗沿用 `momentum_lookback`**：§1.4「過去 252 日」與 §1.3 動量同窗，故不新增參數（不套 skip）。
+4. **新增 config 約束 `vol_window + 1 ≤ max(min_history_days, momentum_lookback+1)`**：保證任何入選資產都算得出滾動波動窗（入選資產至少有該根數 bar），於 config 載入時失敗而非回測中途。
+5. **消融引擎（`experiments/ablation.py`）為通用引擎**：收「策略清單 + 一次動一參數的參數格」，跟得上多少策略跑多少（Phase 3 為 bh_spy/ew_menu/sixty_forty/mom_only/mom_ivol 五支；voltarget_only/full 待 Phase 4 GARCH）。單格 config 驗證失敗只記錄並略過、不拖垮整批；輸出 `comparison.parquet` + `manifest.json`（snapshot_id/git_commit/config_hash，INV-6 provenance）。
+6. **`momentum_scores` diagnostic 記全體合格資產**（§6.2「不只前 K」），`sigma_hat`/`w_risky` 於 mom_ivol 填、mom_only 的 `sigma_hat` 為 None；Phase 4 才有的曝險欄（sigma_p/exposure_*/band_blocked）維持 None。
 
 ---
 
@@ -226,3 +234,4 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-13：push 至 remote（github.com/Sugerpi/QuantSystem），GitHub Actions CI 首次執行成功。**Phase 0 全部 AC 達成 ✅**。
 - 2026-07-16：Phase 1 資料層完成——provider 介面、四 adapters（yfinance/Tiingo/TwelveData/FRED）、NYSE 日曆、決定性 hash、§4.3 五項驗證、§4.5 三源仲裁、決定性含息調整、快照 CLI。首份真實快照 `snapshots/2026-07-16_20ed09`（20 檔）建立；tests/test_data 全綠（77 項）。過程中：Stooq 失效改用 Twelve Data、移除 DBC、將 yfinance 抖動 adj 改為自建決定性調整以達成 AC-4。**Phase 1 全部 AC 達成 ✅**。
 - 2026-07-18：Phase 2 回測核心完成——事件時鐘、PointInTimeView、accounting、engine、metrics、兩 benchmark 策略、experiments run 落地與 CLI。INV-1/2/5/6 由合成迷你快照鎖死（CI 可跑，以變異測試確認各 INV 有牙齒）；三日手算 golden case 通過；AC-3 端到端體檢——引擎自身對快照 SPY 含息總報酬精確到 0.0000 bps/年，對 portfoliovisualizer 差 7.40 bps/年（資料源差異主導）。全套 135 項綠（含 2 項本機快照測試）。8 處規格偏離見上方備忘。過程中整理：formatter 統一為 ruff format 並移除互相衝突的 black、實際安裝 pre-commit hook。最終 code review（opus）抓到 3 項並於 merge 前修正（依賴反向、INV-6 位元比對脆弱、metrics NaN），詳見上方備忘。**Phase 2 全部 AC 達成 ✅**。
+- 2026-07-20：Phase 3 訊號與組合層完成——12-1 橫斷面動量 + 絕對動量過濾（signals/momentum.py）、select_top_k 排序取 K 字母序平手、inverse-vol/等權/絕對動量轉現金（portfolio/weighting.py）、rolling_std 波動 placeholder（models/volatility/）、mom_only/mom_ivol/sixty_forty 三策略、通用消融引擎（experiments/ablation.py）。AC-1（消融跑得動並產出比較表）與 AC-2（決策 diagnostics 完整落盤）皆達成。全套測試 174 項綠。以 subagent-driven TDD 執行，12 個 task 每個經 spec + code-quality 兩段式 review。6 處規格偏離見上方備忘。**Phase 3 全部 AC 達成 ✅**。
