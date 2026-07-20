@@ -55,3 +55,20 @@ def test_absmom_omits_short_history():
     snap = make_snapshot({"SHORT": [1.0, 2.0, 3.0]}, dates)
     out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
     assert "SHORT" not in out
+
+
+def test_absmom_uses_tbill_hurdle_not_just_positive_return():
+    # lookback=4, dtb3=2.52% → tbill_cum ≈ (1.0001)^4 - 1 ≈ 0.00040006
+    # ABOVE: TR=+0.0006 > hurdle → True；BELOW: TR=+0.0002（正報酬但輸給 T-bill）→ False
+    dates = make_dates(5)
+    snap = make_snapshot(
+        {
+            "ABOVE": [10000.0, 10000.0, 10000.0, 10000.0, 10006.0],
+            "BELOW": [10000.0, 10000.0, 10000.0, 10000.0, 10002.0],
+        },
+        dates,
+        dtb3_percent=2.52,
+    )
+    out = absolute_momentum(snap["prices"], snap["rates"], lookback=4)
+    assert out["ABOVE"] is True
+    assert out["BELOW"] is False  # 正報酬但低於 T-bill hurdle → 轉現金

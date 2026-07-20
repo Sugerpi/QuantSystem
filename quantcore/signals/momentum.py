@@ -32,9 +32,15 @@ def absolute_momentum(prices: pd.DataFrame, rates: pd.DataFrame, lookback: int) 
 
     tbill 累積：DTB3（年化 %）→ 日利率（÷100 ÷252），取 ≤ t 的末 lookback 日複利。
     所有資產共用同一 t，故 tbill 窗只算一次。bar 不足者略過（與動量一致）。
+
+    前置條件：rates 至少含 lookback 日；每檔資產末根對齊 rates 末日 t（由上游 eligibility 保證，
+    故所有資產共用同一 tbill 窗）；DTB3 已 ffill 假日（資料層職責，§1.5）。窗內若有 NaN，
+    tbill_cum 為 NaN、所有資產判為 fail——此情形應由資料層驗證擋下（§4.3）。
     """
     r = rates.sort_values("date")["DTB3"].to_numpy() / 100.0 / _DAYS_PER_YEAR
     daily = r[-lookback:]
+    if len(daily) < lookback:
+        raise ValueError(f"rates 不足 {lookback} 日，無法對齊絕對動量窗（僅 {len(daily)} 日）")
     tbill_cum = float(np.prod(1.0 + daily) - 1.0)
 
     out: dict[str, bool] = {}
