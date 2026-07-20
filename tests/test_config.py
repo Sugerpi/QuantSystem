@@ -20,7 +20,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.signal.momentum_lookback == 252
     assert cfg.signal.momentum_skip == 21
     assert cfg.risk.vol_target_annual == 0.10
-    assert cfg.risk.vol_model == "garch_arch"
+    assert cfg.risk.vol_model == "rolling_std"
     assert cfg.backtest.start == date(2005, 1, 3)
     assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
@@ -81,3 +81,47 @@ def test_data_quality_rejects_bad_extreme_return():
     raw["data_quality"]["extreme_return"] = 1.5  # 必須 < 1
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
+
+
+def test_backtest_initial_nav_loaded_and_positive():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.backtest.initial_nav == 1.0
+
+
+def test_backtest_initial_nav_rejects_non_positive(tmp_path):
+    import yaml
+
+    raw = _valid_dict()
+    raw["backtest"]["initial_nav"] = 0.0
+    p = tmp_path / "bad.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValidationError):
+        load_config(p)
+
+
+def test_rolling_std_vol_model_and_window_load():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_window == 63
+
+
+def test_vol_window_must_be_positive():
+    raw = _valid_dict()
+    raw["risk"]["vol_window"] = 0
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_vol_window_exceeding_available_history_rejected():
+    raw = _valid_dict()
+    floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
+    raw["risk"]["vol_window"] = floor  # vol_window+1 > floor → 無法滿窗
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_vol_window_at_available_floor_accepted():
+    raw = _valid_dict()
+    floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
+    raw["risk"]["vol_window"] = floor - 1  # 剛好滿窗 → 應通過
+    QuantConfig.model_validate(raw)  # 不應拋錯

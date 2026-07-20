@@ -13,7 +13,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-VolModel = Literal["garch_arch", "garch_own", "ewma"]
+VolModel = Literal["garch_arch", "garch_own", "ewma", "rolling_std"]
 CorrModel = Literal["dcc", "ewma"]
 
 
@@ -58,6 +58,9 @@ class RiskConfig(_Strict):
     vol_target_annual: float = Field(gt=0)
     exposure_band: float = Field(ge=0, le=1)
     exposure_min: float = Field(ge=0, le=1)
+    vol_window: int = Field(
+        gt=0
+    )  # rolling_std 的滾動窗（交易日）；Phase 4 GARCH 取代後仍保留供 EWMA/基線
 
 
 class ScheduleConfig(_Strict):
@@ -85,9 +88,12 @@ class DataQualityConfig(_Strict):
 
 
 class BacktestConfig(_Strict):
-    """回測範圍（規格 §6）。"""
+    """回測範圍與初始狀態（規格 §6）。"""
 
     start: date
+    initial_nav: float = Field(gt=0)
+    # NAV 為尺度不變：Sharpe/MaxDD/Calmar/換手率皆不受此值影響，僅 nav.parquet 的
+    # 數字大小改變。仍入 config 以維持「參數只在 config」這條明線。
 
 
 class QuantConfig(_Strict):
@@ -107,8 +113,20 @@ class QuantConfig(_Strict):
     def _top_k_within_menu(self) -> QuantConfig:
         if self.signal.top_k > len(self.universe.menu):
             raise ValueError(
-                f"signal.top_k ({self.signal.top_k}) 不可大於選單檔數 "
-                f"({len(self.universe.menu)})"
+                f"signal.top_k ({self.signal.top_k}) 不可大於選單檔數 ({len(self.universe.menu)})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _vol_window_fits_available_history(self) -> QuantConfig:
+        # 入選資產至少有 max(min_history_days, momentum_lookback+1) 根 bar
+        # （須同時通過 eligibility 與動量計分）。滿窗需 vol_window+1 根，
+        # 此約束確保滾動波動窗永遠為滿窗、不致靜默退化為較少樣本。
+        floor = max(self.universe.min_history_days, self.signal.momentum_lookback + 1)
+        if self.risk.vol_window + 1 > floor:
+            raise ValueError(
+                f"risk.vol_window ({self.risk.vol_window}) 過大：入選資產最少 {floor} 根 bar，"
+                f"滾動波動窗需 vol_window+1 根，將無法滿窗"
             )
         return self
 
