@@ -17,7 +17,7 @@
 | 1 | 資料層 | ~1.5 週 | ✅ 完成 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ✅ 完成 |
 | 3 | 訊號與組合層 | ~1 週 | ✅ 完成 |
-| 4 | 波動率模型與波動目標 | ~1-2 週 | ⬜ 未開始 |
+| 4 | 波動率模型與波動目標 | ~1-2 週 | 🟨 進行中（4a 模型層完成，4b/4c 待做） |
 | 5 | DCC 與 ERC | ~1 週 | ⬜ 未開始 |
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ⬜ 未開始 |
 | 7 | Dashboard 與研究報告 | ~2.5 週 | ⬜ 未開始 |
@@ -162,24 +162,37 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ---
 
-## Phase 4 — 波動率模型與波動目標　⬜
+## Phase 4 — 波動率模型與波動目標　🟨
 
-`garch_arch`、`ewma`、多步預測、曝險模組與更新帶、`voltarget_only` 與 `full` 策略、QLIKE 評估、block bootstrap。
+依 brainstorming 切三段：**4a 波動率模型層**（✅ 完成）、4b 曝險模組 + 策略接線、4c bootstrap + 七策略消融。
+設計文件：`docs/superpowers/specs/2026-07-22-phase4a-volatility-models-design.md`；計畫：`docs/superpowers/plans/2026-07-22-phase4a-volatility-models.md`。
 
 ### 任務
-- [ ] `models/volatility/base.py`（縮放 template method，INV-4）
-- [ ] `models/volatility/garch_arch.py`（arch 套件 GARCH(1,1)-t）
-- [ ] `models/volatility/ewma.py`（RiskMetrics λ=0.94，消融基線）
-- [ ] 多步波動預測（H=21，§1.6 Step 1）
-- [ ] `portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口，§1.6）
-- [ ] QLIKE / MZ-R² 評估（§5.4）
-- [ ] block bootstrap（stationary，§6.4）
-- [ ] `voltarget_only`、`full` 策略
+- [x] `models/volatility/base.py`（縮放 template method，INV-4 單一出口）
+- [x] `models/volatility/garch_arch.py`（arch 套件 GARCH(1,1)-t，解析多步）
+- [x] `models/volatility/ewma.py`（RiskMetrics λ=0.94，消融基線 + GARCH fallback）
+- [x] 多步波動預測（H=21，§1.6 Step 1；`annualized_forecast_vol`）
+- [x] QLIKE / MZ-R² 評估（§5.4；`models/volatility/eval.py` + walk-forward 驅動）
+- [ ] `portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口，§1.6）— 4b
+- [ ] block bootstrap（stationary，§6.4）— 4c
+- [ ] `voltarget_only`、`full` 策略 — 4b
 
 ### AC
-- [ ] `full` 已實現波動率落在 σ*（10%）± 2% 內
-- [ ] GARCH vs EWMA 的 QLIKE 比較表產出
-- [ ] 七策略消融全表產出
+- [ ] `full` 已實現波動率落在 σ*（10%）± 2% 內 — 4b/4c
+- [x] **GARCH vs EWMA 的 QLIKE 比較表產出**（4a 達成：GARCH QLIKE 20/20 檔勝 EWMA）
+- [ ] 七策略消融全表產出 — 4c
+
+### Phase 4a 實作備忘（與原規劃的差異，詳見設計文件 §6）
+1. **QLIKE/MZ-R² 放 `models/volatility/eval.py` 而非 §5.4 字面的 `metrics.py`**：依賴方向（models 不得依賴 backtest）。
+2. **新增 config `risk.ewma_lambda`（0.94）/ `risk.forecast_horizon`（21）**：§7.2 未列 λ 與 H，避免魔術數字。
+3. **多步預測用 arch analytic forecast（閉式解析遞迴，非模擬）**：決定性（INV-6）。
+4. **GARCH 失敗（不收斂 / α+β≥1 / 非有限）退回 EWMA + 標記**（`fit_volatility`，非拋錯中斷、非沿用舊參數）：兼顧誠實（可審計 fallback 頻率）與回測可完成。真實快照 walk-forward 共 241 次 fallback（HYG 最高 ~55%），fallback 機制無崩潰。
+5. **4a 只建模型層，未碰 engine/策略**；`mom_ivol` 仍用 rolling_std，待 4b 遷移。
+6. **EWMA 為 IGARCH（α+β=1），豁免 base 的 α+β<1 平穩性檢查**（旗標 `enforce_stationarity`）。
+
+### Phase 4a 過程中補強（review 抓到）
+- **補建缺席的 INV-4 守護測試 `tests/test_invariants/test_garch_conventions.py`**：CLAUDE.md 不變量表列它為 INV-4 守護，但此前檔案不存在——INV-4 一直無測試守護，至此補上（含 mutation-style 的「平穩性檢查有牙齒」測試與 ÷100² 還原測試）。
+- GARCH 標準化殘差保留 DatetimeIndex（供 Phase 5 DCC 按日期對齊）；`fit_volatility` fallback 契約明述僅涵蓋 fit-time；walk-forward 比較表對零變異窗與非退化 fit 例外穩健（單格失敗不丟整表）。
 
 ---
 
@@ -239,3 +252,5 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-18：Phase 2 回測核心完成——事件時鐘、PointInTimeView、accounting、engine、metrics、兩 benchmark 策略、experiments run 落地與 CLI。INV-1/2/5/6 由合成迷你快照鎖死（CI 可跑，以變異測試確認各 INV 有牙齒）；三日手算 golden case 通過；AC-3 端到端體檢——引擎自身對快照 SPY 含息總報酬精確到 0.0000 bps/年，對 portfoliovisualizer 差 7.40 bps/年（資料源差異主導）。全套 135 項綠（含 2 項本機快照測試）。8 處規格偏離見上方備忘。過程中整理：formatter 統一為 ruff format 並移除互相衝突的 black、實際安裝 pre-commit hook。最終 code review（opus）抓到 3 項並於 merge 前修正（依賴反向、INV-6 位元比對脆弱、metrics NaN），詳見上方備忘。**Phase 2 全部 AC 達成 ✅**。
 - 2026-07-20：Phase 3 訊號與組合層完成——12-1 橫斷面動量 + 絕對動量過濾（signals/momentum.py）、select_top_k 排序取 K 字母序平手、inverse-vol/等權/絕對動量轉現金（portfolio/weighting.py）、rolling_std 波動 placeholder（models/volatility/）、mom_only/mom_ivol/sixty_forty 三策略、通用消融引擎（experiments/ablation.py）。AC-1（消融跑得動並產出比較表）與 AC-2（決策 diagnostics 完整落盤）皆達成。全套測試 176 項綠。以 subagent-driven TDD 執行，12 個 task 每個經 spec + code-quality 兩段式 review，最終再做一次整體 holistic review（抓到並修正絕對動量 DTB3 對齊交易日曆的跨模組缺陷，見上方備忘）。6 處規格偏離 + 1 處 review 後修正見上方備忘。**Phase 3 全部 AC 達成 ✅**。
 - 2026-07-20：**修 CI 上長期潛伏的快照 skip 缺陷**（Phase 3 PR 首次觸發而暴露）。快照的 `MANIFEST.json`/`metadata.json` 自 Phase 1（commit `6130e59`）起刻意進版控（hash/provenance），但 `prices/rates.parquet` gitignore。舊 `tests/conftest.py` 的 `requires_snapshot` skip 以 `MANIFEST.json` 是否存在判定，故 CI clone（有 manifest、無 parquet）誤判快照存在、不 skip，於 `load_snapshot` 時 `FileNotFoundError`。已改為以 `prices/rates.parquet` 是否齊全判定 skip：CI 缺 parquet 乾淨 skip、本機有全套照跑（AC-3 本機閘門不變）。以「暫時隱藏 parquet 模擬 CI → 2 skipped、還原 → 2 passed」雙向驗證。**訂正**：Phase 2 的「CI 綠燈」紀錄實為此 manifest 提交之前的狀態；自 `6130e59` 起 CI 對 `requires_snapshot` 測試其實一直紅，至此修復。
+- 2026-07-22：Phase 3 以 `--no-ff` 合併回 main（remote 先前已由 PR #2 合過同分支，改為對齊 origin/main + cherry-pick 缺的 docs 行，未硬推），並開 `feature/phase4-volatility`。
+- 2026-07-22：**Phase 4a 波動率模型層完成**——`VolatilityModel` ABC（base.py，×100 估計/÷100² 還原與 α+β<1 檢查的單一出口，INV-4）、GARCH(1,1)-t via arch（解析多步）、EWMA(λ=0.94)（消融基線 + GARCH fallback）、多步年化聚合、`fit_volatility`（GARCH 失敗退回 EWMA + 標記）、QLIKE/MZ-R² 純函數與 walk-forward 評估驅動。**AC「GARCH vs EWMA QLIKE 比較表」達成**：真實快照 20 檔上 GARCH QLIKE 全面（20/20）勝 EWMA、MZ-R² 17/20 較高；共 241 次 fallback（HYG ~55% 最高）誠實留痕。全套測試 212 項綠。以 subagent-driven TDD 執行 11 個 task，實質程式模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-4 守護測試**（`test_garch_conventions.py`——CLAUDE.md 早列它為 INV-4 守護，但檔案一直不存在，INV-4 至此才真正有測試守護）。邊界：未碰 engine/策略，`mom_ivol` 仍用 rolling_std（待 4b 遷移）。6 處規格偏離見上方 Phase 4a 備忘。**4a 完成，Phase 4 尚有 4b（曝險+策略）/4c（bootstrap+消融）**。
