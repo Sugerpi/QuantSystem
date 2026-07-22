@@ -32,7 +32,7 @@ class GarchArch(VolatilityModel):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             res = am.fit(disp="off", show_warning=False)
-        if int(getattr(res, "convergence_flag", 0)) != 0:
+        if int(getattr(res, "convergence_flag", 1)) != 0:
             raise GarchDegenerateError(f"GARCH 優化未收斂（flag={res.convergence_flag}）")
         pr = res.params
         self._params = {
@@ -44,6 +44,7 @@ class GarchArch(VolatilityModel):
         if not all(np.isfinite(v) for v in self._params.values()):
             raise GarchDegenerateError("GARCH 參數含非有限值")
         self._res = res
+        self._index = scaled_returns.index
 
     def _forecast_scaled(self, horizon: int) -> np.ndarray:
         fc = self._res.forecast(horizon=horizon, method="analytic", reindex=False)
@@ -55,4 +56,4 @@ class GarchArch(VolatilityModel):
 
     @property
     def standardized_residuals(self) -> pd.Series:
-        return pd.Series(np.asarray(self._res.std_resid, dtype="float64"))
+        return pd.Series(np.asarray(self._res.std_resid, dtype="float64"), index=self._index)

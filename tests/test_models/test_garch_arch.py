@@ -64,3 +64,11 @@ def test_nonstationary_series_raises_or_falls_within_bounds():
         assert m.params["alpha"] + m.params["beta"] < 1.0  # 若收斂，必平穩
     except GarchDegenerateError:
         pass  # 非平穩被正確擋下，即符合預期
+
+
+def test_standardized_residuals_unit_scale_and_index_preserved():
+    r = make_garch_t_returns(1500, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=4)
+    m = GarchArch().fit(r)
+    z = m.standardized_residuals
+    assert 0.7 < float(z.std()) < 1.4  # 單位尺度
+    assert z.index.equals(r.index)  # 保留 DatetimeIndex，供 DCC 對齊
