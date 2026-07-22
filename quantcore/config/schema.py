@@ -61,6 +61,8 @@ class RiskConfig(_Strict):
     vol_window: int = Field(
         gt=0
     )  # rolling_std 的滾動窗（交易日）；Phase 4 GARCH 取代後仍保留供 EWMA/基線
+    ewma_lambda: float = Field(gt=0, lt=1)  # §5.3 RiskMetrics EWMA 衰減；也是 GARCH fallback
+    forecast_horizon: int = Field(gt=0)  # §1.6 Step 1 的 H，對齊 selection_interval
 
 
 class ScheduleConfig(_Strict):

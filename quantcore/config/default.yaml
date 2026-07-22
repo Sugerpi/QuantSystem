@@ -23,6 +23,8 @@ risk:                               # §1.6 / §5
   exposure_band: 0.10               # 曝險更新帶
   exposure_min: 0.10                # E_min
   vol_window: 63                    # rolling_std 滾動窗（交易日），Phase 3 placeholder
+  ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
+  forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
 
 schedule:                           # §1.7 再平衡時程
   selection_interval: 21

@@ -125,3 +125,25 @@ def test_vol_window_at_available_floor_accepted():
     floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
     raw["risk"]["vol_window"] = floor - 1  # 剛好滿窗 → 應通過
     QuantConfig.model_validate(raw)  # 不應拋錯
+
+
+def test_risk_ewma_lambda_and_horizon_loaded():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.risk.ewma_lambda == 0.94
+    assert cfg.risk.forecast_horizon == 21
+
+
+def test_risk_ewma_lambda_must_be_open_unit_interval():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"ewma_lambda": 1.0})
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"ewma_lambda": 0.0})
+
+
+def test_risk_forecast_horizon_must_be_positive():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"forecast_horizon": 0})
