@@ -76,3 +76,18 @@ def test_stationarity_enforced_only_when_flag_set():
         _Enforced(fake_alpha_beta=(0.2, 0.85)).fit(r)  # α+β=1.05 ≥ 1
     # α+β<1 正常
     _Enforced(fake_alpha_beta=(0.1, 0.85)).fit(r)
+
+
+def test_forecast_non_finite_raises_garch_degenerate():
+    class _NonFiniteModel(_DummyModel):
+        def _forecast_scaled(self, horizon: int) -> np.ndarray:
+            return np.full(horizon, np.inf, dtype="float64")
+
+    m = _NonFiniteModel().fit(_returns())
+    with pytest.raises(GarchDegenerateError):
+        m.forecast(3)
+
+
+def test_fit_insufficient_observations_raises_value_error():
+    with pytest.raises(ValueError):
+        _DummyModel().fit(pd.Series([0.01]))
