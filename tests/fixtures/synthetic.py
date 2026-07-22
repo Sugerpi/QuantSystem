@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -66,3 +67,28 @@ def make_cfg(menu: list[str], **overrides: dict):
         raw[section].update(values)
     raw["signal"]["top_k"] = min(raw["signal"]["top_k"], len(raw["universe"]["menu"]))
     return QuantConfig.model_validate(raw)
+
+
+def make_garch_t_returns(
+    n: int,
+    omega: float,
+    alpha: float,
+    beta: float,
+    nu: float,
+    seed: int,
+) -> pd.Series:
+    """已知參數 GARCH(1,1)-t 報酬序列（§8：合成資料驗證估計器正確性）。
+
+    Student-t(ν) 創新標準化為單位變異數。回傳原始報酬尺度的 pd.Series
+    （index 為連續 bdate）。α+β<1 由呼叫端保證平穩。
+    """
+    rng = np.random.default_rng(seed)
+    z = rng.standard_t(nu, size=n) * np.sqrt((nu - 2) / nu)  # 單位變異數
+    var = np.empty(n, dtype="float64")
+    ret = np.empty(n, dtype="float64")
+    var[0] = omega / (1 - alpha - beta)  # 無條件變異數起始
+    ret[0] = np.sqrt(var[0]) * z[0]
+    for t in range(1, n):
+        var[t] = omega + alpha * ret[t - 1] ** 2 + beta * var[t - 1]
+        ret[t] = np.sqrt(var[t]) * z[t]
+    return pd.Series(ret, index=pd.bdate_range("2000-01-03", periods=n))
