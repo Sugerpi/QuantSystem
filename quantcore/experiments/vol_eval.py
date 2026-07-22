@@ -52,8 +52,17 @@ def walk_forward_vol_eval(
         forecast_var = float(per_step.mean())  # 平均每日變異數（還原尺度）
         future = vals[t : t + horizon]
         realized_var = float(np.mean(future**2))  # 已實現平均日變異數 proxy
-        forecasts.append(forecast_var)
-        realized.append(realized_var)
+        # 髒資料（如窗內全零報酬）可致 realized_var == 0 或非有限值：qlike 對此類點
+        # 無定義（會 raise），故整批表不應因單一 refit 點而崩潰——僅跳過該點計分，
+        # fallback 計數仍照實累計。
+        if (
+            np.isfinite(forecast_var)
+            and np.isfinite(realized_var)
+            and forecast_var > 0
+            and realized_var > 0
+        ):
+            forecasts.append(forecast_var)
+            realized.append(realized_var)
         t += interval
 
     fa = np.asarray(forecasts)
@@ -85,15 +94,28 @@ def compare_garch_ewma(config_path: str, out_dir: str) -> pd.DataFrame:
     rows = []
     for ticker in sorted(rets):
         for spec in ("garch_arch", "ewma"):
-            res = walk_forward_vol_eval(
-                rets[ticker],
-                spec,
-                warmup=cfg.universe.min_history_days,
-                interval=cfg.schedule.selection_interval,
-                horizon=cfg.risk.forecast_horizon,
-                ewma_lambda=cfg.risk.ewma_lambda,
-            )
-            rows.append({"ticker": ticker, **res})
+            try:
+                res = walk_forward_vol_eval(
+                    rets[ticker],
+                    spec,
+                    warmup=cfg.universe.min_history_days,
+                    interval=cfg.schedule.selection_interval,
+                    horizon=cfg.risk.forecast_horizon,
+                    ewma_lambda=cfg.risk.ewma_lambda,
+                )
+                rows.append({"ticker": ticker, **res})
+            except Exception as exc:  # noqa: BLE001 — 批次表：單格失敗不應丟失其餘資產，留痕續跑
+                rows.append(
+                    {
+                        "ticker": ticker,
+                        "spec": spec,
+                        "n_points": 0,
+                        "n_fallback": 0,
+                        "qlike": float("nan"),
+                        "mz_r2": float("nan"),
+                        "error": str(exc),
+                    }
+                )
     table = pd.DataFrame(rows).sort_values(["ticker", "spec"]).reset_index(drop=True)
 
     out = Path(out_dir)
@@ -102,7 +124,7 @@ def compare_garch_ewma(config_path: str, out_dir: str) -> pd.DataFrame:
     (out / "manifest.json").write_text(
         json.dumps(
             {
-                "snapshot_id": snapshot["manifest"].get("snapshot_id"),
+                "snapshot_id": snapshot["manifest"]["snapshot_id"],
                 "git_commit": git_commit(),
                 "config_hash": config_hash(cfg.model_dump(mode="json")),
                 "quantcore_version": QC_VERSION,

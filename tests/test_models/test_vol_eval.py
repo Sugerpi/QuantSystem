@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from quantcore.experiments.vol_eval import walk_forward_vol_eval
+from quantcore.experiments.vol_eval import _returns_by_ticker, walk_forward_vol_eval
 from quantcore.models.volatility.eval import mincer_zarnowitz_r2, qlike
-from tests.fixtures.synthetic import make_garch_t_returns
+from tests.fixtures.synthetic import make_dates, make_garch_t_returns, make_snapshot
 
 
 def test_qlike_zero_for_perfect_forecast():
@@ -50,3 +50,18 @@ def test_walk_forward_garch_counts_fallbacks_field_present():
     )
     assert "n_fallback" in out
     assert out["n_points"] > 0
+
+
+def test_returns_by_ticker_extracts_pct_change_per_ticker():
+    dates = make_dates(10)
+    snap = make_snapshot(
+        {
+            "AAA": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+            "BBB": [50, 49, 50, 51, 52, 53, 52, 54, 55, 56],
+        },
+        dates,
+    )
+    rets = _returns_by_ticker(snap)
+    assert set(rets) == {"AAA", "BBB"}
+    assert len(rets["AAA"]) == 9  # n_dates - 1（pct_change 丟第一筆）
+    assert rets["AAA"].index.is_monotonic_increasing
