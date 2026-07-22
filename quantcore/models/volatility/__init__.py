@@ -43,7 +43,12 @@ class FitOutcome:
 
 
 def fit_volatility(spec: str, returns: pd.Series, *, ewma_lambda: float) -> FitOutcome:
-    """依 spec 建模型並 fit。garch_arch 失敗退回 EWMA 並記標記（設計文件 §1.4）。"""
+    """依 spec 建模型並 fit。garch_arch 失敗退回 EWMA 並記標記（設計文件 §1.4）。
+
+    fallback 契約僅涵蓋 **fit-time** 退化（不收斂 / α+β≥1 / 非有限參數）。
+    fit 成功後的 forecast 不在保護傘下——但 fit 已強制 α+β<1 且 ω 有限，
+    GARCH(1,1) 解析多步變異數因此恆為有限，forecast-time 退化不可達。
+    """
     if spec == "garch_arch":
         try:
             return FitOutcome(GarchArch().fit(returns), False, None)

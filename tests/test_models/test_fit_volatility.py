@@ -51,6 +51,7 @@ def test_ewma_spec_no_fallback():
     out = fit_volatility("ewma", _good_returns(), ewma_lambda=0.94)
     assert isinstance(out.model, Ewma)
     assert out.fell_back is False
+    assert out.reason is None
 
 
 def test_unknown_spec_raises():
