@@ -45,6 +45,7 @@ class GarchArch(VolatilityModel):
             raise GarchDegenerateError("GARCH 參數含非有限值")
         self._res = res
         self._index = scaled_returns.index
+        self._scaled = scaled_returns
 
     def _forecast_scaled(self, horizon: int) -> np.ndarray:
         fc = self._res.forecast(horizon=horizon, method="analytic", reindex=False)
@@ -56,4 +57,8 @@ class GarchArch(VolatilityModel):
 
     @property
     def standardized_residuals(self) -> pd.Series:
-        return pd.Series(np.asarray(self._res.std_resid, dtype="float64"), index=self._index)
+        # r_t/σ_t（尺度不變：×100 分子分母相消），與 Ewma 一致、符合 base 契約。
+        # 用 arch 的條件波動而非 res.std_resid（後者在 mean="Constant" 下已去估計均值），
+        # 確保 GARCH 與 EWMA fallback 資產的殘差定義一致（Phase 5 DCC 唯一輸入）。
+        cond_vol = np.asarray(self._res.conditional_volatility, dtype="float64")
+        return pd.Series(self._scaled.to_numpy() / cond_vol, index=self._index)

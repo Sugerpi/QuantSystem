@@ -94,6 +94,10 @@ def compare_garch_ewma(config_path: str, out_dir: str) -> pd.DataFrame:
     rows = []
     for ticker in sorted(rets):
         for spec in ("garch_arch", "ewma"):
+            # 穩健性粒度為「單一 (ticker, spec) 格」：一格失敗記 error row、不丟其餘資產。
+            # 格內單一 refit 點的非退化例外目前不可達（warmup=252 ≥ _min_obs=100，
+            # GarchDegenerateError 已由 fit_volatility fallback 接住）。4b 若縮小 window
+            # 使其可達，再於此加 point-level 跳過（backlog）。
             try:
                 res = walk_forward_vol_eval(
                     rets[ticker],

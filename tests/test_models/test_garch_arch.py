@@ -72,3 +72,16 @@ def test_standardized_residuals_unit_scale_and_index_preserved():
     z = m.standardized_residuals
     assert 0.7 < float(z.std()) < 1.4  # 單位尺度
     assert z.index.equals(r.index)  # 保留 DatetimeIndex，供 DCC 對齊
+
+
+def test_standardized_residuals_definition_matches_ewma_convention():
+    # GARCH 與 EWMA 的標準化殘差都應為 r_t/σ_t（尺度不變），供 Phase 5 DCC 一致取用。
+    from quantcore.models.volatility.ewma import Ewma
+
+    r = make_garch_t_returns(1500, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=4)
+    zg = GarchArch().fit(r).standardized_residuals
+    ze = Ewma(0.94).fit(r).standardized_residuals
+    # 兩者皆保留輸入的 DatetimeIndex 且為單位尺度
+    assert zg.index.equals(r.index) and ze.index.equals(r.index)
+    assert 0.7 < float(zg.std()) < 1.4
+    assert 0.7 < float(ze.std()) < 1.4
