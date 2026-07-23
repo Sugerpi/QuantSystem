@@ -69,3 +69,13 @@ def test_build_covariance_rejects_bad_sigma():
         build_covariance({"A": 0.2}, np.array([[1.0, 0.0], [0.0, 1.0]]), ["A", "B"])  # 缺 B
     with pytest.raises(ValueError):
         build_covariance({"A": -0.2, "B": 0.2}, np.eye(2), ["A", "B"])  # 非正
+
+
+def test_build_covariance_rejects_non_finite_R():
+    with pytest.raises(ValueError):
+        build_covariance({"A": 0.2, "B": 0.3}, np.array([[1.0, np.nan], [np.nan, 1.0]]), ["A", "B"])
+
+
+def test_build_covariance_rejects_R_ticker_length_mismatch():
+    with pytest.raises(ValueError):
+        build_covariance({"A": 0.2, "B": 0.3}, np.array([[1.0]]), ["A", "B"])  # 1x1 R vs 2 tickers
