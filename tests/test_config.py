@@ -147,3 +147,15 @@ def test_risk_forecast_horizon_must_be_positive():
 
     with pytest.raises(ValidationError):
         make_cfg(["SPY", "TLT"], risk={"forecast_horizon": 0})
+
+
+def test_risk_garch_window_loaded():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.risk.garch_window == 1000
+
+
+def test_risk_garch_window_must_be_at_least_min_obs():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"garch_window": 50})  # < 100
