@@ -123,6 +123,8 @@ class QuantConfig(_Strict):
 
     @model_validator(mode="after")
     def _vol_window_fits_available_history(self) -> QuantConfig:
+        if self.risk.vol_model != "rolling_std":
+            return self  # vol_window 僅 rolling_std 使用；其他模型不受此約束
         # 入選資產至少有 max(min_history_days, momentum_lookback+1) 根 bar
         # （須同時通過 eligibility 與動量計分）。滿窗需 vol_window+1 根，
         # 此約束確保滾動波動窗永遠為滿窗、不致靜默退化為較少樣本。

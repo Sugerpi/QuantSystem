@@ -114,6 +114,7 @@ def test_vol_window_must_be_positive():
 
 def test_vol_window_exceeding_available_history_rejected():
     raw = _valid_dict()
+    raw["risk"]["vol_model"] = "rolling_std"  # 此約束僅 rolling_std 適用
     floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
     raw["risk"]["vol_window"] = floor  # vol_window+1 > floor → 無法滿窗
     with pytest.raises(ValidationError):
@@ -122,9 +123,17 @@ def test_vol_window_exceeding_available_history_rejected():
 
 def test_vol_window_at_available_floor_accepted():
     raw = _valid_dict()
+    raw["risk"]["vol_model"] = "rolling_std"  # 此約束僅 rolling_std 適用
     floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
     raw["risk"]["vol_window"] = floor - 1  # 剛好滿窗 → 應通過
     QuantConfig.model_validate(raw)  # 不應拋錯
+
+
+def test_vol_window_constraint_only_applies_to_rolling_std():
+    from tests.fixtures.synthetic import make_cfg
+
+    # garch_arch + 大 vol_window（超過 momentum floor）應通過——vol_window 對 garch_arch 無意義
+    make_cfg(["SPY", "TLT"], risk={"vol_model": "garch_arch", "vol_window": 10_000})
 
 
 def test_risk_ewma_lambda_and_horizon_loaded():

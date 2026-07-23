@@ -59,3 +59,20 @@ def test_full_warmup_is_max_of_momentum_and_history():
     assert Full(cfg).warmup_days == max(
         cfg.signal.momentum_lookback + 1, cfg.universe.min_history_days
     )
+
+
+def test_full_and_mom_ivol_share_selection_layer():
+    # 消融科學性守護：full 與 mom_ivol 只差曝險層——同一 view 上「選擇層」
+    # （selected / sigma_hat / w_risky）必須相同。若動量選擇序列或 σ̂ 估計器在
+    # full._select_and_weight 與 MomentumStrategy.decide 兩份 copy 之間漂移，此測試轉紅。
+    from quantcore.backtest.strategies.mom_ivol import MomentumInverseVol
+
+    snap, dates = _snap()
+    cfg = _cfg()  # 兩者共用同一 config（ewma、同 top_k/momentum 參數）
+    view = make_view(snap, dates[300])
+    df = Full(cfg).decide(view, DecisionEvent.SELECTION)
+    dm = MomentumInverseVol(cfg).decide(view, DecisionEvent.SELECTION)
+    assert df is not None and dm is not None
+    assert df.diagnostics.selected == dm.diagnostics.selected
+    assert df.diagnostics.sigma_hat == pytest.approx(dm.diagnostics.sigma_hat)
+    assert df.diagnostics.w_risky == pytest.approx(dm.diagnostics.w_risky)
