@@ -26,6 +26,9 @@ class Full(VolTargetStrategy):
 
     def _select_and_weight(self, view: PointInTimeView) -> RiskyState | None:
         cfg = self._cfg
+        # 選標的序列（eligible→動量→top_k→absmom）與 MomentumStrategy.decide 相同，須保持一致——
+        # full/mom_ivol/mom_only 的消融須共用同一選擇邏輯才 apples-to-apples
+        # （backlog：抽 momentum_select 共用，4c 前）。
         elig = eligible_assets(view.prices, cfg.universe.menu, cfg.universe.min_history_days)
         scores = cross_sectional_momentum(
             view.prices, cfg.signal.momentum_lookback, cfg.signal.momentum_skip

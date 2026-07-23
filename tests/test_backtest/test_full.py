@@ -38,6 +38,7 @@ def test_full_selection_weights_sum_to_one_and_scaled_by_exposure():
     assert dec is not None
     assert sum(dec.target_weights.values()) == pytest.approx(1.0)
     E = dec.diagnostics.exposure_applied
+    assert all(dec.diagnostics.absmom[t] for t in dec.diagnostics.selected)  # 前提：全過
     risky_sum = sum(v for k, v in dec.target_weights.items() if k != CASH)
     assert risky_sum == pytest.approx(E, abs=1e-9)  # 全過：risky_sum == E×Σw_risky == E
     assert len(dec.diagnostics.selected) == 2
@@ -49,6 +50,8 @@ def test_full_records_garch_diagnostics():
     dec = Full(_cfg()).decide(make_view(snap, dates[300]), DecisionEvent.SELECTION)
     assert set(dec.diagnostics.vol_fell_back) == set(dec.diagnostics.selected)
     assert set(dec.diagnostics.garch_params) == set(dec.diagnostics.selected)
+    assert all(v is None for v in dec.diagnostics.garch_params.values())
+    assert not any(dec.diagnostics.vol_fell_back.values())
 
 
 def test_full_warmup_is_max_of_momentum_and_history():

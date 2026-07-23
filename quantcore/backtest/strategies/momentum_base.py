@@ -27,6 +27,7 @@ class MomentumStrategy(Strategy):
         if event is not DecisionEvent.SELECTION:
             return None
         cfg = self._cfg
+        # 此選標的序列與 Full._select_and_weight 相同（見該處註解）；改動須同步兩處。
         elig = eligible_assets(view.prices, cfg.universe.menu, cfg.universe.min_history_days)
         scores = cross_sectional_momentum(
             view.prices, cfg.signal.momentum_lookback, cfg.signal.momentum_skip
