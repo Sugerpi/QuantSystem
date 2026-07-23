@@ -11,7 +11,15 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from quantcore.models.volatility.base import GarchDegenerateError, VolatilityModel
+from quantcore.models.volatility.base import _SCALE, GarchDegenerateError, VolatilityModel
+
+
+def _build_arch_model(scaled_array: np.ndarray):
+    """建 GARCH(1,1)-t（×100 尺度）。_estimate 與 garch_filter_forecast 共用，
+    使模型規格單一來源——規格若變（dist/p/q）兩條路徑不會靜默分歧。"""
+    from arch import arch_model
+
+    return arch_model(scaled_array, mean="Constant", vol="GARCH", p=1, q=1, dist="t")
 
 
 class GarchArch(VolatilityModel):
@@ -19,16 +27,7 @@ class GarchArch(VolatilityModel):
     _min_obs = 100  # GARCH-t MLE 需足夠樣本
 
     def _estimate(self, scaled_returns: pd.Series) -> None:
-        from arch import arch_model
-
-        am = arch_model(
-            scaled_returns.to_numpy(),
-            mean="Constant",
-            vol="GARCH",
-            p=1,
-            q=1,
-            dist="t",
-        )
+        am = _build_arch_model(scaled_returns.to_numpy())
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             res = am.fit(disp="off", show_warning=False)
@@ -70,18 +69,18 @@ class GarchArch(VolatilityModel):
         return pd.Series(self._scaled.to_numpy() / cond_vol, index=self._index)
 
 
-_SCALE = 100.0  # ×100 估計 / ÷100² 還原，慣例同 base（INV-4）；一致性由 test 鎖住
-
-
 def garch_filter_forecast(fixed_params: np.ndarray, returns: pd.Series, horizon: int) -> np.ndarray:
     """以固定 arch 參數對 returns 濾波（不跑 MLE），回每步變異數（已 ÷100² 還原）。
 
     fixed_params 為完整 arch 向量（GarchArch.arch_params）。§5.2 的便宜濾波路徑。
     """
-    from arch import arch_model
-
+    if horizon < 1:
+        raise ValueError(f"horizon 必須 ≥ 1，收到 {horizon}")
     r = returns.astype("float64").dropna()
-    am = arch_model(r.to_numpy() * _SCALE, mean="Constant", vol="GARCH", p=1, q=1, dist="t")
+    am = _build_arch_model(r.to_numpy() * _SCALE)
     res = am.fix(np.asarray(fixed_params, dtype="float64"))
     fc = res.forecast(horizon=horizon, method="analytic", reindex=False)
-    return np.asarray(fc.variance.to_numpy()[-1], dtype="float64") / (_SCALE**2)
+    out = np.asarray(fc.variance.to_numpy()[-1], dtype="float64") / (_SCALE**2)
+    if not np.all(np.isfinite(out)):
+        raise GarchDegenerateError("濾波多步預測含非有限值（固定參數退化）")
+    return out

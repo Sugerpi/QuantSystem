@@ -103,3 +103,14 @@ def test_arch_params_full_vector_length_five():
     m = GarchArch().fit(r)
     # 完整 arch 向量 [mu, omega, alpha[1], beta[1], nu]
     assert m.arch_params.shape == (5,)
+
+
+def test_garch_filter_forecast_rejects_bad_horizon():
+    import pytest
+
+    from quantcore.models.volatility.garch_arch import garch_filter_forecast
+
+    r = make_garch_t_returns(1000, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=2)
+    params = GarchArch().fit(r).arch_params
+    with pytest.raises(ValueError):
+        garch_filter_forecast(params, r, 0)
