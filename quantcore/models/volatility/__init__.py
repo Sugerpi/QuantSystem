@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
 from quantcore.models.volatility.base import (
     DAYS_PER_YEAR,
     GarchDegenerateError,
     VolatilityModel,
+    annualize_variance_path,
 )
 from quantcore.models.volatility.ewma import Ewma
 from quantcore.models.volatility.garch_arch import GarchArch
@@ -30,9 +30,8 @@ def estimate_annualized_vol(vol_model: str, adj_close: pd.Series, window: int) -
 
 
 def annualized_forecast_vol(model: VolatilityModel, horizon: int) -> float:
-    """σ̂ = sqrt( (1/H)·Σ_{h=1..H} Var(t+h) )·sqrt(252)（規格 §1.6 Step 1）。"""
-    per_step_var = model.forecast(horizon)
-    return float(np.sqrt(per_step_var.mean()) * np.sqrt(DAYS_PER_YEAR))
+    """σ̂ = sqrt( (1/H)·Σ Var(t+h) )·sqrt(252)（規格 §1.6 Step 1）。"""
+    return annualize_variance_path(model.forecast(horizon))
 
 
 @dataclass(frozen=True)
@@ -66,6 +65,7 @@ __all__ = [
     "GarchArch",
     "GarchDegenerateError",
     "VolatilityModel",
+    "annualize_variance_path",
     "annualized_forecast_vol",
     "annualized_vol",
     "estimate_annualized_vol",

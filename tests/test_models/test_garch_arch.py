@@ -85,3 +85,21 @@ def test_standardized_residuals_definition_matches_ewma_convention():
     assert zg.index.equals(r.index) and ze.index.equals(r.index)
     assert 0.7 < float(zg.std()) < 1.4
     assert 0.7 < float(ze.std()) < 1.4
+
+
+def test_garch_filter_forecast_matches_fit_forecast():
+    # filter 正確性錨：以 fit 出的完整參數對同序列濾波，結果須與 fit().forecast() 一致。
+    from quantcore.models.volatility.garch_arch import garch_filter_forecast
+
+    r = make_garch_t_returns(1500, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=13)
+    m = GarchArch().fit(r)
+    filtered = garch_filter_forecast(m.arch_params, r, 21)
+    assert filtered.shape == (21,)
+    assert np.allclose(filtered, m.forecast(21))
+
+
+def test_arch_params_full_vector_length_five():
+    r = make_garch_t_returns(1000, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=1)
+    m = GarchArch().fit(r)
+    # 完整 arch 向量 [mu, omega, alpha[1], beta[1], nu]
+    assert m.arch_params.shape == (5,)

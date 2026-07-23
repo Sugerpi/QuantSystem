@@ -81,3 +81,8 @@ class VolatilityModel(ABC):
     @abstractmethod
     def _forecast_scaled(self, horizon: int) -> np.ndarray:
         """×100 尺度的每步變異數（長度 horizon）。"""
+
+
+def annualize_variance_path(per_step_var: np.ndarray) -> float:
+    """每步變異數 → 年化波動：sqrt(mean(Var))·sqrt(252)（規格 §1.6 Step 1 的聚合）。"""
+    return float(np.sqrt(np.mean(per_step_var)) * np.sqrt(DAYS_PER_YEAR))
