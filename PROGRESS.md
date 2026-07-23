@@ -206,6 +206,7 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 ### Phase 4b-1 過程中補強（review 抓到）
 - **補建缺席的 INV-3 守護測試 `tests/test_invariants/test_covariance_valid.py`**（與 INV-4 同：CLAUDE.md 早列為守護、檔案卻不存在。含 mutation-style：移除 PSD 投影即紅燈，已實測驗證有牙齒）。
 - `build_covariance` 出口拒絕非有限 R（零變異窗）+ tickers 長度校驗；GARCH `arch_model` 規格單一來源（`_build_arch_model`）+ filter 補 horizon/非有限守護；`VolForecaster` 快取改 dataclass。
+- **整體 holistic review 抓到跨模組 seam 隱患並結構性修掉**：covariance 三函數原靠「未強制的 ticker 順序約定」黏合，且 **INV-3 守護對錯配是盲的**（R_ii=1 使置換後 Σ 對角線/PSD 仍成立、給假信心）；已改為 **label-aligned（R/Σ 為 pd.DataFrame，依 label 對齊）**，並讓 `portfolio_vol` 對「w_risky 有但 cov 未涵蓋」的資產拋錯（否則 σ̂_p 低估、曝險過高）——ticker 錯配與風險低估自此結構上不可能。趁 4b-2 尚無 call site 修掉，blast radius 僅測試。
 - **待 4b-2 處理的呼叫端契約**：`VolForecaster` 快取不過期，正確性依賴呼叫端每次重選都 `refit`；4b-2 整合測試須驗「重選後 filter 不吃到 stale 參數」。
 
 ---
