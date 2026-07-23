@@ -36,6 +36,15 @@ def test_band_blocks_small_change():
     r = target_exposure(sigma_p=0.20, sigma_star=0.10, e_min=0.10, band=0.10, e_current=0.55)
     assert r.exposure_applied == pytest.approx(0.55)
     assert r.band_blocked is True
+    assert r.exposure_raw == pytest.approx(0.5)  # 擋下時 raw 仍為真實原始目標 σ*/σ̂_p
+
+
+def test_band_boundary_equal_is_blocked():
+    # |clipped − e_current| == band exactly → 擋（嚴格 >，等於帶寬不動作）
+    # σ̂_p=0.20 → clipped=0.5；e_current=0.40，差恰 0.10 == band → blocked
+    r = target_exposure(sigma_p=0.20, sigma_star=0.10, e_min=0.10, band=0.10, e_current=0.40)
+    assert r.exposure_applied == pytest.approx(0.40)
+    assert r.band_blocked is True
 
 
 def test_band_allows_large_change():
