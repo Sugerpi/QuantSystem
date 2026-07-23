@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 
@@ -15,14 +17,20 @@ from quantcore.models.volatility.base import annualize_variance_path
 from quantcore.models.volatility.garch_arch import GarchArch, garch_filter_forecast
 
 
+@dataclass(frozen=True)
+class _CacheEntry:
+    kind: str  # 'garch' | 'ewma'
+    arch_params: np.ndarray | None
+    fell_back: bool
+
+
 class VolForecaster:
     def __init__(self, spec: str, ewma_lambda: float, horizon: int, garch_window: int) -> None:
         self._spec = spec
         self._ewma_lambda = ewma_lambda
         self._horizon = horizon
         self._window = garch_window
-        # ticker -> (kind: 'garch'|'ewma', arch_params 或 None, fell_back)
-        self._cache: dict[str, tuple[str, np.ndarray | None, bool]] = {}
+        self._cache: dict[str, _CacheEntry] = {}
 
     def _tail(self, returns: pd.Series) -> pd.Series:
         return returns.iloc[-self._window :]
@@ -31,22 +39,27 @@ class VolForecaster:
         """選擇日：完整估計（含 fallback），快取，回年化 σ̂。"""
         outcome = fit_volatility(self._spec, self._tail(returns), ewma_lambda=self._ewma_lambda)
         if isinstance(outcome.model, GarchArch):
-            self._cache[ticker] = ("garch", outcome.model.arch_params, outcome.fell_back)
+            self._cache[ticker] = _CacheEntry("garch", outcome.model.arch_params, outcome.fell_back)
         else:
-            self._cache[ticker] = ("ewma", None, outcome.fell_back)
+            self._cache[ticker] = _CacheEntry("ewma", None, outcome.fell_back)
         return annualized_forecast_vol(outcome.model, self._horizon)
 
     def filter(self, ticker: str, returns: pd.Series) -> float:
         """曝險檢查日：以快取參數濾波（GARCH 走 fix()，EWMA 重跑）。無快取則 refit。"""
         if ticker not in self._cache:
             return self.refit(ticker, returns)
-        kind, params, _ = self._cache[ticker]
+        entry = self._cache[ticker]
         window = self._tail(returns)
-        if kind == "garch":
-            return annualize_variance_path(garch_filter_forecast(params, window, self._horizon))
+        if entry.kind == "garch":
+            # 快取參數來自成功的 fit（α+β<1、ω 有限），GARCH(1,1) 解析多步變異數因此
+            # 恆有限——garch_filter_forecast 的非有限守護在此不可達。
+            return annualize_variance_path(
+                garch_filter_forecast(entry.arch_params, window, self._horizon)
+            )
         outcome = fit_volatility("ewma", window, ewma_lambda=self._ewma_lambda)
         return annualized_forecast_vol(outcome.model, self._horizon)
 
     def last_fell_back(self, ticker: str) -> bool:
-        """該 ticker 上次 refit 是否退回 EWMA（供 4b-2 落盤 model_details）。"""
-        return self._cache[ticker][2]
+        """該 ticker 上次 refit 是否退回 EWMA（供 4b-2 落盤 model_details）。
+        前置條件：ticker 須已 refit 過（未 refit 會 KeyError——呼叫端在選擇日必先 refit）。"""
+        return self._cache[ticker].fell_back
