@@ -56,6 +56,8 @@ def _diagnostics_row(diag) -> dict:
         "exposure_raw": diag.exposure_raw,
         "exposure_applied": diag.exposure_applied,
         "band_blocked": diag.band_blocked,
+        "vol_fell_back": j(diag.vol_fell_back),
+        "garch_params": j(diag.garch_params),
     }
 
 
