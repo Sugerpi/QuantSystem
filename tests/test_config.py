@@ -20,7 +20,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.signal.momentum_lookback == 252
     assert cfg.signal.momentum_skip == 21
     assert cfg.risk.vol_target_annual == 0.10
-    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_model == "garch_arch"
     assert cfg.backtest.start == date(2005, 1, 3)
     assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
@@ -99,9 +99,9 @@ def test_backtest_initial_nav_rejects_non_positive(tmp_path):
         load_config(p)
 
 
-def test_rolling_std_vol_model_and_window_load():
+def test_vol_model_and_window_load():
     cfg = load_config(DEFAULT_YAML)
-    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_model == "garch_arch"
     assert cfg.risk.vol_window == 63
 
 
@@ -164,3 +164,8 @@ def test_risk_garch_window_must_be_at_least_min_obs():
 def test_risk_corr_window_loaded():
     cfg = load_config("quantcore/config/default.yaml")
     assert cfg.risk.corr_window == 252
+
+
+def test_default_vol_model_is_garch_arch():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.vol_model == "garch_arch"
