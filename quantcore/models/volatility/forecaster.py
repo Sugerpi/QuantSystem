@@ -63,3 +63,16 @@ class VolForecaster:
         """該 ticker 上次 refit 是否退回 EWMA（供 4b-2 落盤 model_details）。
         前置條件：ticker 須已 refit 過（未 refit 會 KeyError——呼叫端在選擇日必先 refit）。"""
         return self._cache[ticker].fell_back
+
+    def last_params(self, ticker: str) -> dict[str, float] | None:
+        """GARCH ticker 回可讀 {omega,alpha,beta,nu}；EWMA/fallback 回 None（供診斷落盤）。"""
+        entry = self._cache[ticker]
+        if entry.kind != "garch" or entry.arch_params is None:
+            return None
+        p = entry.arch_params  # [mu, omega, alpha[1], beta[1], nu]
+        return {
+            "omega": float(p[1]),
+            "alpha": float(p[2]),
+            "beta": float(p[3]),
+            "nu": float(p[4]),
+        }

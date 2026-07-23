@@ -80,3 +80,17 @@ def test_refit_and_filter_agree_on_same_window():
     s_refit = f.refit("AAA", r)
     s_filter = f.filter("AAA", r)  # 同窗、同快取參數 → 應相同
     assert s_filter == pytest.approx(s_refit)
+
+
+def test_last_params_returns_readable_dict_for_garch():
+    f = VolForecaster("garch_arch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    f.refit("AAA", _returns())
+    p = f.last_params("AAA")
+    assert set(p) == {"omega", "alpha", "beta", "nu"}
+    assert p["alpha"] + p["beta"] < 1.0  # 平穩
+
+
+def test_last_params_none_for_ewma_spec():
+    f = VolForecaster("ewma", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    f.refit("AAA", _returns())
+    assert f.last_params("AAA") is None
