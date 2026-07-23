@@ -95,3 +95,16 @@ def test_band_block_yields_log_only_decision():
     if dec.diagnostics.band_blocked:
         assert dec.execute is False
         assert strat._e_current == e0
+
+
+def test_forecast_selected_returns_sigma_params_fellback_triple():
+    from quantcore.backtest.strategies.vol_target_base import forecast_selected
+    from quantcore.models.volatility.forecaster import VolForecaster
+
+    snap, dates = _snap()
+    view = make_view(snap, dates[50])
+    f = VolForecaster("ewma", ewma_lambda=0.94, horizon=21, garch_window=100)
+    sigma_hat, garch_params, fell_back = forecast_selected(f, view, ["A", "B"])
+    assert set(sigma_hat) == {"A", "B"} and all(v > 0 for v in sigma_hat.values())
+    assert garch_params == {"A": None, "B": None}  # ewma → 無 GARCH 參數
+    assert fell_back == {"A": False, "B": False}

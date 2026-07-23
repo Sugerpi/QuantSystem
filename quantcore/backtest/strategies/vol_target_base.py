@@ -14,6 +14,7 @@ import pandas as pd
 from quantcore.backtest.accounting import CASH
 from quantcore.backtest.ptview import PointInTimeView
 from quantcore.backtest.strategy import Decision, DecisionEvent, Diagnostics, Strategy
+from quantcore.config import QuantConfig
 from quantcore.models.covariance import build_covariance, portfolio_vol, rolling_correlation
 from quantcore.models.volatility.forecaster import VolForecaster
 from quantcore.portfolio.exposure import target_exposure
@@ -36,6 +37,22 @@ def ticker_returns(view: PointInTimeView, ticker: str) -> pd.Series:
     return view.history(ticker)["adj_close"].astype("float64").pct_change().dropna()
 
 
+def forecast_selected(
+    forecaster: VolForecaster, view: PointInTimeView, selected: list[str]
+) -> tuple[dict[str, float], dict[str, dict[str, float] | None], dict[str, bool]]:
+    """對每檔 refit σ̂，並收集 GARCH 參數與 fallback 旗標（診斷用）。
+    回 (sigma_hat, garch_params, fell_back)。
+    """
+    sigma_hat: dict[str, float] = {}
+    garch_params: dict[str, dict[str, float] | None] = {}
+    fell_back: dict[str, bool] = {}
+    for t in selected:
+        sigma_hat[t] = forecaster.refit(t, ticker_returns(view, t))
+        garch_params[t] = forecaster.last_params(t)
+        fell_back[t] = forecaster.last_fell_back(t)
+    return sigma_hat, garch_params, fell_back
+
+
 def _selected_returns_window(
     view: PointInTimeView, selected: list[str], window: int
 ) -> pd.DataFrame:
@@ -45,7 +62,7 @@ def _selected_returns_window(
 
 
 class VolTargetStrategy(Strategy):
-    def __init__(self, cfg) -> None:
+    def __init__(self, cfg: QuantConfig) -> None:
         super().__init__(cfg)
         self._forecaster = VolForecaster(
             cfg.risk.vol_model,
@@ -78,6 +95,7 @@ class VolTargetStrategy(Strategy):
         else:  # EXPOSURE_CHECK
             if self._cache is None:
                 return None
+            assert self._e_current is not None  # _cache 已設 ⟹ 選擇日已賦值 _e_current
             state = self._refilter(view, self._cache)
             e_current = self._e_current
 
