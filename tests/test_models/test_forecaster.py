@@ -12,6 +12,11 @@ def _returns(n=1500, seed=5):
     return make_garch_t_returns(n, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=seed)
 
 
+def test_unsupported_spec_rejected_eagerly():
+    with pytest.raises(ValueError):
+        VolForecaster("rolling_std", ewma_lambda=0.94, horizon=21, garch_window=100)
+
+
 def test_refit_returns_reasonable_annualized_vol():
     f = VolForecaster("garch_arch", ewma_lambda=0.94, horizon=21, garch_window=1000)
     s = f.refit("AAA", _returns())

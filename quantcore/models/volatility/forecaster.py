@@ -31,6 +31,8 @@ class VolForecaster:
         self._horizon = horizon
         self._window = garch_window
         self._cache: dict[str, _CacheEntry] = {}
+        if spec not in ("garch_arch", "ewma"):
+            raise ValueError(f"VolForecaster 不支援 vol_model={spec!r}（可用：garch_arch | ewma）")
 
     def _tail(self, returns: pd.Series) -> pd.Series:
         return returns.iloc[-self._window :]

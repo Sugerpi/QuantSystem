@@ -9,6 +9,7 @@ from __future__ import annotations
 from quantcore.backtest.ptview import PointInTimeView
 from quantcore.backtest.strategies.momentum_base import MomentumStrategy
 from quantcore.backtest.strategies.vol_target_base import ticker_returns
+from quantcore.config import QuantConfig
 from quantcore.models.volatility.forecaster import VolForecaster
 from quantcore.portfolio.weighting import inverse_vol
 
@@ -16,7 +17,7 @@ from quantcore.portfolio.weighting import inverse_vol
 class MomentumInverseVol(MomentumStrategy):
     strategy_id = "mom_ivol"
 
-    def __init__(self, cfg) -> None:
+    def __init__(self, cfg: QuantConfig) -> None:
         super().__init__(cfg)
         self._forecaster = VolForecaster(
             cfg.risk.vol_model,
@@ -31,7 +32,11 @@ class MomentumInverseVol(MomentumStrategy):
         sigma_hat = {t: self._forecaster.refit(t, ticker_returns(view, t)) for t in selected}
         return inverse_vol(sigma_hat), sigma_hat
 
-    def _vol_diagnostics(self, selected):
+    # 前置條件：同一決策內 _risky_weights 已對所有 selected refit（decide 保證此順序），
+    # 故此處讀 forecaster cache（last_params/last_fell_back）不會 KeyError。
+    def _vol_diagnostics(
+        self, selected: list[str]
+    ) -> tuple[dict[str, dict[str, float] | None], dict[str, bool]]:
         return (
             {t: self._forecaster.last_params(t) for t in selected},
             {t: self._forecaster.last_fell_back(t) for t in selected},

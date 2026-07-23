@@ -106,10 +106,7 @@ def test_mom_ivol_weights_are_inverse_vol():
 def test_mom_ivol_uses_vol_forecaster_and_records_diagnostics():
     import numpy as np
 
-    from quantcore.backtest.ptview import make_view
     from quantcore.backtest.strategies.mom_ivol import MomentumInverseVol
-    from quantcore.backtest.strategy import DecisionEvent
-    from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
 
     n = 160
     dates = make_dates(n)
