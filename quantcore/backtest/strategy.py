@@ -40,6 +40,10 @@ class Diagnostics:
     exposure_raw: float | None = None
     exposure_applied: float | None = None
     band_blocked: bool | None = None
+    vol_fell_back: dict[str, bool] | None = None  # 每檔 GARCH 是否退回 EWMA（決策當下記，§6.2）
+    garch_params: dict[str, dict[str, float] | None] | None = (
+        None  # 每檔 {omega,alpha,beta,nu}；EWMA/None
+    )
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,7 @@ class Decision:
 
     target_weights: dict[str, float]
     diagnostics: Diagnostics
+    execute: bool = True  # False = 只落診斷、不 rebalance（band-blocked 曝險檢查，§1.7）
 
 
 class Strategy(ABC):
