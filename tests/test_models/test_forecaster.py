@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from quantcore.models.volatility.forecaster import VolForecaster
 from tests.fixtures.synthetic import make_garch_t_returns
 
@@ -70,3 +72,11 @@ def test_filter_without_cache_falls_back_to_refit():
     s = f.filter("NEW", _returns())  # 從未 refit
     assert 0.01 < s < 2.0
     assert "NEW" in f._cache  # filter 已代為 refit 並快取
+
+
+def test_refit_and_filter_agree_on_same_window():
+    r = _returns()
+    f = VolForecaster("garch_arch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    s_refit = f.refit("AAA", r)
+    s_filter = f.filter("AAA", r)  # 同窗、同快取參數 → 應相同
+    assert s_filter == pytest.approx(s_refit)
