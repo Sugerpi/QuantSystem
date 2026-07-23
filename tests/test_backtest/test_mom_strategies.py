@@ -76,8 +76,11 @@ def test_mom_only_routes_absmom_failure_to_cash():
 
 
 def test_mom_ivol_weights_are_inverse_vol():
+    # mom_ivol 已遷移到 VolForecaster（GARCH/EWMA），不再支援 rolling_std（見 §6.3）；
+    # 覆寫 vol_model=ewma（其餘沿用 _CFG_KW），只驗證結構性行為，非 rolling_std 數值。
     dates = make_dates(6)
-    cfg = make_cfg(["WIN", "MID", "LOSE"], **_CFG_KW)
+    kw = {**_CFG_KW, "risk": {**_CFG_KW["risk"], "vol_model": "ewma"}}
+    cfg = make_cfg(["WIN", "MID", "LOSE"], **kw)
     strat = STRATEGIES["mom_ivol"](cfg)
     d = strat.decide(make_view(_snap(dates), dates[-1]), DecisionEvent.SELECTION)
     assert set(d.diagnostics.selected) == {"WIN", "MID"}
@@ -98,3 +101,34 @@ def test_mom_ivol_weights_are_inverse_vol():
     expected = inverse_vol(d.diagnostics.sigma_hat)
     for ticker, w in expected.items():
         assert d.target_weights[ticker] == pytest.approx(w)
+
+
+def test_mom_ivol_uses_vol_forecaster_and_records_diagnostics():
+    import numpy as np
+
+    from quantcore.backtest.ptview import make_view
+    from quantcore.backtest.strategies.mom_ivol import MomentumInverseVol
+    from quantcore.backtest.strategy import DecisionEvent
+    from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
+
+    n = 160
+    dates = make_dates(n)
+    rng = np.random.default_rng(3)
+    prices = {
+        tk: list(100 * np.cumprod(1 + rng.normal(0.0002 * (i + 1), 0.01, n)))
+        for i, tk in enumerate(["A", "B", "C"])
+    }
+    snap = make_snapshot(prices, dates)
+    cfg = make_cfg(
+        ["A", "B", "C"],
+        risk={"vol_model": "ewma", "garch_window": 100},
+        signal={"top_k": 2, "momentum_lookback": 120, "momentum_skip": 5},
+        universe={"min_history_days": 130},
+    )
+    strat = MomentumInverseVol(cfg)
+    dec = strat.decide(make_view(snap, dates[150]), DecisionEvent.SELECTION)
+    assert dec is not None
+    assert set(dec.diagnostics.vol_fell_back) == set(dec.diagnostics.selected)
+    assert dec.diagnostics.sigma_hat is not None
+    risky = {k: v for k, v in dec.target_weights.items() if k != "CASH"}
+    assert sum(risky.values()) == pytest.approx(1.0)

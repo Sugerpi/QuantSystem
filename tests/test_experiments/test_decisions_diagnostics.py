@@ -31,7 +31,8 @@ def test_mom_ivol_decisions_have_full_diagnostics(tmp_path):
         ["WIN", "MID", "LOSE", "SPY", "IEF"],
         signal={"momentum_lookback": 4, "momentum_skip": 1, "top_k": 2},
         universe={"min_history_days": 5},
-        risk={"vol_model": "rolling_std", "vol_window": 3},
+        # mom_ivol 已遷移到 VolForecaster（GARCH/EWMA），不再支援 rolling_std（§6.3）
+        risk={"vol_model": "ewma", "vol_window": 3},
         schedule={"selection_interval": 3, "exposure_check_interval": 2},
         backtest={"start": dates[0].date().isoformat(), "initial_nav": 1.0},
     )

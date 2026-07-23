@@ -37,6 +37,7 @@ class MomentumStrategy(Strategy):
             return None
         selected = select_top_k(scores, cfg.signal.top_k)
         w_risky, sigma_hat = self._risky_weights(selected, view)
+        garch_params, fell_back = self._vol_diagnostics(selected)
         absmom_all = absolute_momentum(view.prices, view.rates, cfg.signal.momentum_lookback)
         absmom = {t: bool(absmom_all.get(t, False)) for t in selected}
         weights, cash = route_absmom_to_cash(w_risky, absmom)
@@ -50,6 +51,8 @@ class MomentumStrategy(Strategy):
                 absmom=absmom,
                 sigma_hat=sigma_hat,
                 w_risky=w_risky,
+                vol_fell_back=fell_back,
+                garch_params=garch_params,
             ),
         )
 
@@ -58,3 +61,9 @@ class MomentumStrategy(Strategy):
         self, selected: list[str], view: PointInTimeView
     ) -> tuple[dict[str, float], dict[str, float] | None]:
         """回傳 (相對權重 Σ=1, σ̂ 或 None)。"""
+
+    def _vol_diagnostics(
+        self, selected: list[str]
+    ) -> tuple[dict[str, dict[str, float] | None] | None, dict[str, bool] | None]:
+        """(garch_params, fell_back)；預設 None（無 GARCH，如 mom_only）。子類可覆寫。"""
+        return None, None
