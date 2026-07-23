@@ -81,22 +81,25 @@ def run_strategy(
             if decision is not None:
                 exec_day = clock.execution_day(t)
                 if exec_day is not None:
-                    if pending is not None:
-                        raise RuntimeError(
-                            f"{t:%Y-%m-%d} 產生新決策，但前次決策尚未執行——"
-                            "時程間隔設定有誤（見 EventClock 的間隔 ≥ 2 檢查）"
-                        )
-                    pending = _Pending(target=dict(decision.target_weights), execution_day=exec_day)
                     decision_rows.append(
                         {
                             "decision_date": t,
-                            "execution_date": exec_day,
+                            "execution_date": exec_day if decision.execute else None,
                             "strategy_id": strategy.strategy_id,
                             "event": str(event),
                             "diagnostics": decision.diagnostics,
                             "target_weights": dict(decision.target_weights),
                         }
                     )
+                    if decision.execute:
+                        if pending is not None:
+                            raise RuntimeError(
+                                f"{t:%Y-%m-%d} 產生新決策，但前次決策尚未執行——"
+                                "時程間隔設定有誤（見 EventClock 的間隔 ≥ 2 檢查）"
+                            )
+                        pending = _Pending(
+                            target=dict(decision.target_weights), execution_day=exec_day
+                        )
 
         nav_rows.append(
             {
