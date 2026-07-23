@@ -26,6 +26,7 @@ risk:                               # §1.6 / §5
   ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
   forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
   garch_window: 1000                # GARCH 估計滾動窗上限（交易日，~4 年）；界定每次 fit 成本 O(cap)
+  corr_window: 252                  # §1.6 滾動樣本相關窗（交易日）；≫ top_k 保 R 滿秩，可消融 {126,252}
 
 schedule:                           # §1.7 再平衡時程
   selection_interval: 21

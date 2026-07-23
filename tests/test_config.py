@@ -159,3 +159,8 @@ def test_risk_garch_window_must_be_at_least_min_obs():
 
     with pytest.raises(ValidationError):
         make_cfg(["SPY", "TLT"], risk={"garch_window": 50})  # < 100
+
+
+def test_risk_corr_window_loaded():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.corr_window == 252
