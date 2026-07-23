@@ -164,8 +164,9 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ## Phase 4 — 波動率模型與波動目標　🟨
 
-依 brainstorming 切三段：**4a 波動率模型層**（✅ 完成）、4b 曝險模組 + 策略接線、4c bootstrap + 七策略消融。
-設計文件：`docs/superpowers/specs/2026-07-22-phase4a-volatility-models-design.md`；計畫：`docs/superpowers/plans/2026-07-22-phase4a-volatility-models.md`。
+依 brainstorming 切三段：**4a 波動率模型層**（✅）、**4b 曝險+策略接線**、4c bootstrap + 七策略消融。
+4b 再切兩段：**4b-1 基礎模組**（exposure/covariance/VolForecaster，✅）、**4b-2 策略+engine 接線**。
+設計/計畫文件見 `docs/superpowers/specs/` 與 `docs/superpowers/plans/` 的 `phase4a-*` / `phase4b1-*`。
 
 ### 任務
 - [x] `models/volatility/base.py`（縮放 template method，INV-4 單一出口）
@@ -173,9 +174,11 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 - [x] `models/volatility/ewma.py`（RiskMetrics λ=0.94，消融基線 + GARCH fallback）
 - [x] 多步波動預測（H=21，§1.6 Step 1；`annualized_forecast_vol`）
 - [x] QLIKE / MZ-R² 評估（§5.4；`models/volatility/eval.py` + walk-forward 驅動）
-- [ ] `portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口，§1.6）— 4b
+- [x] `portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口，§1.6）— 4b-1
+- [x] `models/covariance.py`（過渡滾動相關 Σ=D·R·D，INV-3）— 4b-1（規格未列，`full` 的 σ̂_p 需要）
+- [x] `VolForecaster` refit/filter + 有上界滾動窗（§5.2）— 4b-1
 - [ ] block bootstrap（stationary，§6.4）— 4c
-- [ ] `voltarget_only`、`full` 策略 — 4b
+- [ ] `voltarget_only`、`full` 策略、`mom_ivol` 遷移、engine 接線 — 4b-2
 
 ### AC
 - [ ] `full` 已實現波動率落在 σ*（10%）± 2% 內 — 4b/4c
@@ -193,6 +196,17 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 ### Phase 4a 過程中補強（review 抓到）
 - **補建缺席的 INV-4 守護測試 `tests/test_invariants/test_garch_conventions.py`**：CLAUDE.md 不變量表列它為 INV-4 守護，但此前檔案不存在——INV-4 一直無測試守護，至此補上（含 mutation-style 的「平穩性檢查有牙齒」測試與 ÷100² 還原測試）。
 - GARCH 標準化殘差保留 DatetimeIndex（供 Phase 5 DCC 按日期對齊）；`fit_volatility` fallback 契約明述僅涵蓋 fit-time；walk-forward 比較表對零變異窗與非退化 fit 例外穩健（單格失敗不丟整表）。
+
+### Phase 4b-1 實作備忘（與原規劃的差異，詳見設計文件 `phase4b1-*` §4）
+1. **過渡 `covariance.py` 用滾動樣本相關**：DCC（§5.3）為 Phase 5，4b 先以樣本相關填 R；`build_covariance`/`portfolio_vol` 介面穩定，Phase 5 只換 R 來源。INV-3 靠「投影 R 為合法 PSD 相關 → Σ=D·R·D」自然同時成立（對稱/PSD/對角線=個別變異數）。
+2. **新增 config `risk.garch_window`（1000）+ 有上界滾動窗**：§5.2 只給估計下限未給上限；展開窗會使後期 refit 成本 O(t) 膨脹（回測+消融爆炸）。改為尾端 `garch_window` 根的滾動窗，成本恆 O(cap)。回測起點仍由動量 warmup 決定、不受 cap 影響（2008 恆在內）。
+3. **`VolForecaster` 有狀態、refit/filter 分離**（§5.2）：refit 昂貴（MLE，選擇日）、filter 便宜（arch `fix()` 固定參數濾波，曝險檢查日），4c 消融格點約快 5×。有狀態比照 bh_spy，引擎每 run 新建，不破 INV-6。
+4. **帶只作用於曝險檢查日**（選擇日傳 `e_current=None`）：§1.7 表格把帶列於曝險檢查日；選擇日完整重算、換手內生。
+
+### Phase 4b-1 過程中補強（review 抓到）
+- **補建缺席的 INV-3 守護測試 `tests/test_invariants/test_covariance_valid.py`**（與 INV-4 同：CLAUDE.md 早列為守護、檔案卻不存在。含 mutation-style：移除 PSD 投影即紅燈，已實測驗證有牙齒）。
+- `build_covariance` 出口拒絕非有限 R（零變異窗）+ tickers 長度校驗；GARCH `arch_model` 規格單一來源（`_build_arch_model`）+ filter 補 horizon/非有限守護；`VolForecaster` 快取改 dataclass。
+- **待 4b-2 處理的呼叫端契約**：`VolForecaster` 快取不過期，正確性依賴呼叫端每次重選都 `refit`；4b-2 整合測試須驗「重選後 filter 不吃到 stale 參數」。
 
 ---
 
@@ -253,4 +267,5 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-20：Phase 3 訊號與組合層完成——12-1 橫斷面動量 + 絕對動量過濾（signals/momentum.py）、select_top_k 排序取 K 字母序平手、inverse-vol/等權/絕對動量轉現金（portfolio/weighting.py）、rolling_std 波動 placeholder（models/volatility/）、mom_only/mom_ivol/sixty_forty 三策略、通用消融引擎（experiments/ablation.py）。AC-1（消融跑得動並產出比較表）與 AC-2（決策 diagnostics 完整落盤）皆達成。全套測試 176 項綠。以 subagent-driven TDD 執行，12 個 task 每個經 spec + code-quality 兩段式 review，最終再做一次整體 holistic review（抓到並修正絕對動量 DTB3 對齊交易日曆的跨模組缺陷，見上方備忘）。6 處規格偏離 + 1 處 review 後修正見上方備忘。**Phase 3 全部 AC 達成 ✅**。
 - 2026-07-20：**修 CI 上長期潛伏的快照 skip 缺陷**（Phase 3 PR 首次觸發而暴露）。快照的 `MANIFEST.json`/`metadata.json` 自 Phase 1（commit `6130e59`）起刻意進版控（hash/provenance），但 `prices/rates.parquet` gitignore。舊 `tests/conftest.py` 的 `requires_snapshot` skip 以 `MANIFEST.json` 是否存在判定，故 CI clone（有 manifest、無 parquet）誤判快照存在、不 skip，於 `load_snapshot` 時 `FileNotFoundError`。已改為以 `prices/rates.parquet` 是否齊全判定 skip：CI 缺 parquet 乾淨 skip、本機有全套照跑（AC-3 本機閘門不變）。以「暫時隱藏 parquet 模擬 CI → 2 skipped、還原 → 2 passed」雙向驗證。**訂正**：Phase 2 的「CI 綠燈」紀錄實為此 manifest 提交之前的狀態；自 `6130e59` 起 CI 對 `requires_snapshot` 測試其實一直紅，至此修復。
 - 2026-07-22：Phase 3 以 `--no-ff` 合併回 main（remote 先前已由 PR #2 合過同分支，改為對齊 origin/main + cherry-pick 缺的 docs 行，未硬推），並開 `feature/phase4-volatility`。
-- 2026-07-22：**Phase 4a 波動率模型層完成**——`VolatilityModel` ABC（base.py，×100 估計/÷100² 還原與 α+β<1 檢查的單一出口，INV-4）、GARCH(1,1)-t via arch（解析多步）、EWMA(λ=0.94)（消融基線 + GARCH fallback）、多步年化聚合、`fit_volatility`（GARCH 失敗退回 EWMA + 標記）、QLIKE/MZ-R² 純函數與 walk-forward 評估驅動。**AC「GARCH vs EWMA QLIKE 比較表」達成**：真實快照 20 檔上 GARCH QLIKE 全面（20/20）勝 EWMA、MZ-R² 17/20 較高；共 241 次 fallback（HYG ~55% 最高）誠實留痕。全套測試 212 項綠。以 subagent-driven TDD 執行 11 個 task，實質程式模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-4 守護測試**（`test_garch_conventions.py`——CLAUDE.md 早列它為 INV-4 守護，但檔案一直不存在，INV-4 至此才真正有測試守護）。邊界：未碰 engine/策略，`mom_ivol` 仍用 rolling_std（待 4b 遷移）。6 處規格偏離見上方 Phase 4a 備忘。**4a 完成，Phase 4 尚有 4b（曝險+策略）/4c（bootstrap+消融）**。
+- 2026-07-22：**Phase 4a 波動率模型層完成**——`VolatilityModel` ABC（base.py，×100 估計/÷100² 還原與 α+β<1 檢查的單一出口，INV-4）、GARCH(1,1)-t via arch（解析多步）、EWMA(λ=0.94)（消融基線 + GARCH fallback）、多步年化聚合、`fit_volatility`（GARCH 失敗退回 EWMA + 標記）、QLIKE/MZ-R² 純函數與 walk-forward 評估驅動。**AC「GARCH vs EWMA QLIKE 比較表」達成**：真實快照 20 檔上 GARCH QLIKE 全面（20/20）勝 EWMA、MZ-R² 17/20 較高；共 241 次 fallback（HYG ~55% 最高）誠實留痕。全套測試 212 項綠。以 subagent-driven TDD 執行 11 個 task，實質程式模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-4 守護測試**（`test_garch_conventions.py`——CLAUDE.md 早列它為 INV-4 守護，但檔案一直不存在，INV-4 至此才真正有測試守護）。邊界：未碰 engine/策略，`mom_ivol` 仍用 rolling_std（待 4b 遷移）。6 處規格偏離見上方 Phase 4a 備忘。**4a 完成，Phase 4 尚有 4b（曝險+策略）/4c（bootstrap+消融）**。4a 完成後推 `feature/phase4-volatility` 至 origin 當雲端檢查點。
+- 2026-07-22：**Phase 4b-1 基礎模組完成**——`portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口；帶只作用於曝險檢查日）、`models/covariance.py`（過渡滾動樣本相關 Σ=D·R·D，投影 R 保 PSD+對角線=個別變異數，INV-3）、`VolForecaster`（refit/filter 分離 + 有上界滾動窗 `garch_window`=1000，成本 O(cap) 不爆炸）、`garch_filter_forecast`（arch `fix()` 固定參數濾波）。全套測試 242 項綠。以 subagent-driven TDD 執行 7 個 task，實質模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-3 守護測試**（`test_covariance_valid.py`——與 INV-4 同，CLAUDE.md 早列卻不存在；經 mutation 驗證有牙齒）。過程 review 補強：covariance 出口拒絕非有限 R、GARCH `arch_model` 規格單一來源、filter 補守護、cache 改 dataclass。邊界：未碰 engine/策略，待 4b-2 組裝（含 stale-cache 呼叫端契約）。4 處規格偏離見上方 Phase 4b-1 備忘。
