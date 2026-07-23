@@ -220,7 +220,8 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 ### Phase 4b-2 過程中補強（review 抓到）
 - **`VolForecaster.__init__` eager 驗證** spec ∈ {garch_arch, ewma}：非法 vol_model 在策略建構時就 fail-fast，而非回測深處首次 refit 才拋錯。
 - `full` 用 `forecast_selected` 共用 helper（消除 refit+診斷三元組在 full/voltarget_only 的重複）；engine log-only 補 `pd.isna` 契約 + log-only→executed 序列覆蓋。
-- **backlog（4c 前處理）**：動量選擇序列（eligible→動量→top_k→absmom）現在 `MomentumStrategy.decide` 與 `Full._select_and_weight` 各一份（已加交叉引用註解）——4c 消融跑之前抽 `momentum_select` 共用，確保 full/mom_ivol/mom_only 選擇邏輯結構性一致（消融 apples-to-apples）。GARCH 診斷的 strategy-layer 端到端覆蓋亦待 4c 真實快照跑到。
+- **整體 holistic review 補的消融守護**：抓到「full vs mom_ivol 只差曝險層」這條**橫跨模組的科學不變量原本只靠註解守、無測試**——補了回歸測試 `test_full_and_mom_ivol_share_selection_layer`（同一 view 上兩者 selected/sigma_hat/w_risky 須相等，任一份選擇序列 copy 漂移即紅燈）。並把 `_vol_window_fits_available_history` 約束 gate 在 `vol_model=="rolling_std"`（garch_arch 不用 vol_window，休眠參數不再誤否決合法配置）。
+- **backlog（4c 前處理）**：動量選擇序列（eligible→動量→top_k→absmom）現在 `MomentumStrategy.decide` 與 `Full._select_and_weight` 各一份（已加交叉引用註解 + 上述等價回歸測試守）——4c 消融跑之前抽 `momentum_select` 共用，讓一致性由結構而非測試保證。GARCH 診斷的 strategy-layer 端到端覆蓋亦待 4c 真實快照跑到。
 
 ### Phase 4b-2 邊界
 七策略齊備（bh_spy/ew_menu/sixty_forty/mom_only/voltarget_only/mom_ivol/full）、GARCH 為預設 vol 來源、曝險機制與 band 落盤完整。**4c 做 block bootstrap + 七策略消融全表 + σ*±2% 條件式量測 + 子期間分析**，屆時 Phase 4 全部 AC 達成。
