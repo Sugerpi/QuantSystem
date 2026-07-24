@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pydantic import ValidationError
 
@@ -82,6 +83,68 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
     return result
 
 
+def _baseline_returns(
+    base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """各策略在 baseline config 下的（日報酬, 日rf），同一 clock 對齊。"""
+    d = snapshot["prices"]["date"]
+    days = pd.DatetimeIndex(sorted(d.unique()))
+    days = days[days >= pd.Timestamp(base_cfg.backtest.start)]
+    strategies = [STRATEGIES[sid](base_cfg) for sid in strategy_ids]
+    warmup = max(s.warmup_days for s in strategies)
+    clock = EventClock(
+        trading_days=days,
+        warmup=warmup,
+        selection_interval=base_cfg.schedule.selection_interval,
+        exposure_check_interval=base_cfg.schedule.exposure_check_interval,
+    )
+    out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for s in strategies:
+        nav_df, _w, _dec = run_strategy(snapshot, clock, s, base_cfg)
+        rate = (
+            snapshot["rates"].set_index("date")["DTB3"].reindex(nav_df["date"]).ffill().bfill()
+            / 100.0
+            / _DAYS_PER_YEAR
+        )
+        r = nav_df["nav"].pct_change().dropna().to_numpy()
+        rf = rate.to_numpy()[1:]  # 對齊 pct_change 去掉的首日
+        out[s.strategy_id] = (r, rf)
+    lengths = {len(r) for r, _ in out.values()}
+    if len(lengths) != 1:
+        raise ValueError(f"baseline 各策略報酬長度不一致：{lengths}（clock 對齊有誤）")
+    return out
+
+
+def _baseline_bootstrap(
+    base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> pd.DataFrame:
+    """full vs 每個其他策略的 Sharpe/Calmar 配對差異 CI（§6.3）。full 不在則回空表。"""
+    from quantcore.backtest.metrics import (
+        metric_calmar,
+        metric_sharpe,
+        paired_metric_diff_ci,
+        stationary_bootstrap_indices,
+    )
+
+    if "full" not in strategy_ids:
+        return pd.DataFrame()
+    series = _baseline_returns(base_cfg, snapshot, strategy_ids)
+    ra, rf = series["full"]
+    n = len(ra)
+    rng = np.random.default_rng(base_cfg.seed)  # INV-6
+    idx = stationary_bootstrap_indices(
+        n, base_cfg.stats.bootstrap_mean_block, base_cfg.stats.bootstrap_reps, rng
+    )
+    rows = []
+    for sid, (rb, _rf) in series.items():
+        if sid == "full":
+            continue
+        for mname, mfn in (("sharpe", metric_sharpe), ("calmar", metric_calmar)):
+            res = paired_metric_diff_ci(ra, rb, rf, mfn, idx, base_cfg.stats.bootstrap_alpha)
+            rows.append({"vs": sid, "metric": mname, **res})
+    return pd.DataFrame(rows)
+
+
 def _write_manifest(
     run_dir: Path,
     base_cfg: QuantConfig,
@@ -142,6 +205,11 @@ def run_ablation(
     run_dir = create_run_dir(out_root, f"{label}_ablation", now)
     table.to_parquet(run_dir / "comparison.parquet", index=False)
     _write_manifest(run_dir, base_cfg, snapshot, strategy_ids, param_grid, failed_cells)
+
+    bootstrap = _baseline_bootstrap(base_cfg, snapshot, strategy_ids)
+    if not bootstrap.empty:
+        bootstrap.to_parquet(run_dir / "bootstrap.parquet", index=False)
+
     _print_summary(table)
     return run_dir
 
