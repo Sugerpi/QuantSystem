@@ -64,6 +64,21 @@ def test_bootstrap_ci_deterministic():
     )
 
 
+def test_ci_all_nonfinite_returns_nan_not_crash():
+    r = np.full(100, 0.001)
+    idx = stationary_bootstrap_indices(100, 21, 50, np.random.default_rng(1))
+    point, lo, hi = bootstrap_metric_ci(r, _rf(100), lambda a, b: float("nan"), idx)
+    assert np.isnan(lo) and np.isnan(hi)
+
+
+def test_paired_diff_all_nonfinite_returns_nan_excludes_false():
+    r = np.full(100, 0.001)
+    idx = stationary_bootstrap_indices(100, 21, 50, np.random.default_rng(1))
+    res = paired_metric_diff_ci(r, r, _rf(100), lambda a, b: float("nan"), idx)
+    assert np.isnan(res["lo"]) and np.isnan(res["hi"])
+    assert res["excludes_zero"] is False
+
+
 def test_indices_shape_and_bounds():
     rng = np.random.default_rng(42)
     idx = stationary_bootstrap_indices(n=200, mean_block=21, n_reps=50, rng=rng)

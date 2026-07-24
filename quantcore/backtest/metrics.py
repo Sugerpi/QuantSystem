@@ -104,6 +104,16 @@ def metric_calmar(r: np.ndarray, rf: np.ndarray) -> float:
     return calmar(_nav_from_returns(r))
 
 
+def _percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
+    """雙尾百分位 CI (lo, hi)。剔除非有限後若無樣本則回 (nan, nan)——避免 np.percentile 崩潰。"""
+    finite = samples[np.isfinite(samples)]
+    if finite.size == 0:
+        return float("nan"), float("nan")
+    lo = float(np.percentile(finite, 100 * alpha / 2))
+    hi = float(np.percentile(finite, 100 * (1 - alpha / 2)))
+    return lo, hi
+
+
 def bootstrap_metric_ci(
     returns: np.ndarray,
     rf: np.ndarray,
@@ -115,9 +125,9 @@ def bootstrap_metric_ci(
     r = np.asarray(returns, dtype="float64")
     f = np.asarray(rf, dtype="float64")
     stats = np.array([metric_fn(r[ix], f[ix]) for ix in indices])
-    stats = stats[np.isfinite(stats)]
-    lo = float(np.percentile(stats, 100 * alpha / 2))
-    hi = float(np.percentile(stats, 100 * (1 - alpha / 2)))
+    # 非有限重抽（如 Calmar 對零回撤 resample 回 nan）被剔除：
+    # CI 為「條件於有定義的 resample」的覆蓋。
+    lo, hi = _percentile_ci(stats, alpha)
     return float(metric_fn(r, f)), lo, hi
 
 
@@ -137,11 +147,11 @@ def paired_metric_diff_ci(
     b = np.asarray(returns_b, dtype="float64")
     f = np.asarray(rf, dtype="float64")
     diffs = np.array([metric_fn(a[ix], f[ix]) - metric_fn(b[ix], f[ix]) for ix in indices])
-    diffs = diffs[np.isfinite(diffs)]
-    lo = float(np.percentile(diffs, 100 * alpha / 2))
-    hi = float(np.percentile(diffs, 100 * (1 - alpha / 2)))
+    # 非有限重抽（如 Calmar 對零回撤 resample 回 nan）被剔除：
+    # CI 為「條件於有定義的 resample」的覆蓋。
+    lo, hi = _percentile_ci(diffs, alpha)
     point = float(metric_fn(a, f) - metric_fn(b, f))
-    return {"point": point, "lo": lo, "hi": hi, "excludes_zero": lo > 0 or hi < 0}
+    return {"point": point, "lo": lo, "hi": hi, "excludes_zero": bool(lo > 0 or hi < 0)}
 
 
 def compute_metrics(
