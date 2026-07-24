@@ -135,11 +135,9 @@ def test_ablation_skips_invalid_cell_keeps_valid(tmp_path):
     assert any(f["cell_label"] == "signal.top_k=999" for f in manifest["failed_cells"])
 
 
-def test_ablation_writes_bootstrap_table_when_full_present(tmp_path):
+def _bootstrap_cfg_and_snap():
     import numpy as np
-    import pandas as pd
 
-    from quantcore.experiments.ablation import run_ablation
     from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
 
     n = 340
@@ -159,8 +157,42 @@ def test_ablation_writes_bootstrap_table_when_full_present(tmp_path):
         universe={"min_history_days": 130},
         stats={"bootstrap_reps": 50},
     )
+    return cfg, snap
+
+
+def test_ablation_writes_bootstrap_table_when_full_present(tmp_path):
+    import pandas as pd
+
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
     run_dir = run_ablation(cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path, "test")
     bt = pd.read_parquet(run_dir / "bootstrap.parquet")
     assert set(bt["vs"]) == {"mom_ivol", "voltarget_only"}
     assert set(bt["metric"]) == {"sharpe", "calmar"}
     assert {"point", "lo", "hi", "excludes_zero"} <= set(bt.columns)
+
+
+def test_ablation_bootstrap_is_deterministic(tmp_path):
+    import pandas as pd
+
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
+    run_dir_1 = run_ablation(
+        cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path / "run1", "test"
+    )
+    run_dir_2 = run_ablation(
+        cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path / "run2", "test"
+    )
+    bt1 = pd.read_parquet(run_dir_1 / "bootstrap.parquet")
+    bt2 = pd.read_parquet(run_dir_2 / "bootstrap.parquet")
+    pd.testing.assert_frame_equal(bt1, bt2)
+
+
+def test_ablation_skips_bootstrap_table_when_full_absent(tmp_path):
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
+    run_dir = run_ablation(cfg, snap, ["mom_ivol", "voltarget_only"], {}, tmp_path, "test")
+    assert not (run_dir / "bootstrap.parquet").exists()

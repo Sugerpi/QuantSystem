@@ -20,7 +20,13 @@ from pydantic import ValidationError
 
 from quantcore.backtest.clock import EventClock
 from quantcore.backtest.engine import run_strategy
-from quantcore.backtest.metrics import compute_metrics
+from quantcore.backtest.metrics import (
+    compute_metrics,
+    metric_calmar,
+    metric_sharpe,
+    paired_metric_diff_ci,
+    stationary_bootstrap_indices,
+)
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.config import QuantConfig, load_config
 from quantcore.data.hashing import config_hash
@@ -50,12 +56,13 @@ def _build_cells(base_raw: dict, param_grid: dict[str, list]) -> list[tuple[str,
     return cells
 
 
-def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict[str, dict]:
-    """跑指定策略，回傳 {strategy_id: metrics dict}。in-memory，不落 run 目錄。"""
+def _build_clock(
+    cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> tuple[EventClock, list]:
+    """建各策略共用的單一 EventClock（warmup = 全策略最大），並回實例化的策略清單。"""
     d = snapshot["prices"]["date"]
     days = pd.DatetimeIndex(sorted(d.unique()))
     days = days[days >= pd.Timestamp(cfg.backtest.start)]
-
     strategies = [STRATEGIES[sid](cfg) for sid in strategy_ids]
     warmup = max(s.warmup_days for s in strategies)
     clock = EventClock(
@@ -64,15 +71,26 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
         selection_interval=cfg.schedule.selection_interval,
         exposure_check_interval=cfg.schedule.exposure_check_interval,
     )
+    return clock, strategies
+
+
+def _daily_rate(snapshot: dict, dates: pd.Series) -> pd.Series:
+    """DTB3 年化% → 日利率，對齊 dates。"""
+    return (
+        snapshot["rates"].set_index("date")["DTB3"].reindex(dates).ffill().bfill()
+        / 100.0
+        / _DAYS_PER_YEAR
+    )
+
+
+def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict[str, dict]:
+    """跑指定策略，回傳 {strategy_id: metrics dict}。in-memory，不落 run 目錄。"""
+    clock, strategies = _build_clock(cfg, snapshot, strategy_ids)
 
     result: dict[str, dict] = {}
     for s in strategies:
         nav_df, _w, _dec = run_strategy(snapshot, clock, s, cfg)
-        rate = (
-            snapshot["rates"].set_index("date")["DTB3"].reindex(nav_df["date"]).ffill().bfill()
-            / 100.0
-            / _DAYS_PER_YEAR
-        )
+        rate = _daily_rate(snapshot, nav_df["date"])
         result[s.strategy_id] = compute_metrics(
             nav=nav_df["nav"].reset_index(drop=True),
             rate_daily=rate.reset_index(drop=True),
@@ -87,25 +105,14 @@ def _baseline_returns(
     base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """各策略在 baseline config 下的（日報酬, 日rf），同一 clock 對齊。"""
-    d = snapshot["prices"]["date"]
-    days = pd.DatetimeIndex(sorted(d.unique()))
-    days = days[days >= pd.Timestamp(base_cfg.backtest.start)]
-    strategies = [STRATEGIES[sid](base_cfg) for sid in strategy_ids]
-    warmup = max(s.warmup_days for s in strategies)
-    clock = EventClock(
-        trading_days=days,
-        warmup=warmup,
-        selection_interval=base_cfg.schedule.selection_interval,
-        exposure_check_interval=base_cfg.schedule.exposure_check_interval,
-    )
+    clock, strategies = _build_clock(base_cfg, snapshot, strategy_ids)
     out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for s in strategies:
         nav_df, _w, _dec = run_strategy(snapshot, clock, s, base_cfg)
-        rate = (
-            snapshot["rates"].set_index("date")["DTB3"].reindex(nav_df["date"]).ffill().bfill()
-            / 100.0
-            / _DAYS_PER_YEAR
-        )
+        rate = _daily_rate(snapshot, nav_df["date"])
+        # bootstrap 用 dropna 對齊（n-1 日）：與 comparison 表的 compute_metrics
+        # （fillna(0.0), n 日）建構略異，故 bootstrap 的 point 可能與表頭 sharpe
+        # 不完全相等——但配對差異與 excludes_zero 判定自洽、不受影響。
         r = nav_df["nav"].pct_change().dropna().to_numpy()
         rf = rate.to_numpy()[1:]  # 對齊 pct_change 去掉的首日
         out[s.strategy_id] = (r, rf)
@@ -119,13 +126,6 @@ def _baseline_bootstrap(
     base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
 ) -> pd.DataFrame:
     """full vs 每個其他策略的 Sharpe/Calmar 配對差異 CI（§6.3）。full 不在則回空表。"""
-    from quantcore.backtest.metrics import (
-        metric_calmar,
-        metric_sharpe,
-        paired_metric_diff_ci,
-        stationary_bootstrap_indices,
-    )
-
     if "full" not in strategy_ids:
         return pd.DataFrame()
     series = _baseline_returns(base_cfg, snapshot, strategy_ids)
