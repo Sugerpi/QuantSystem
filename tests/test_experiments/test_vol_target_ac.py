@@ -56,6 +56,25 @@ def test_full_conditional_all_pass_includes_all():
     assert res["n_included"] == res["n_total"]  # 全部報酬日納入
 
 
+def test_full_conditional_days_before_first_selection_excluded():
+    # 首個 selection 執行於 01-05：其前的報酬日（pos=-1）應被排除
+    dec = _full_decisions([("2020-01-05", 0.0)])
+    dates = pd.to_datetime([f"2020-01-0{i}" for i in range(1, 8)])
+    nav = pd.Series(1.0 + 0.001 * np.arange(7), index=dates)
+    res = full_conditional_realized_vol(dec, nav, threshold=0.10)
+    assert 0 < res["n_included"] < res["n_total"]  # 01-05 之前的日子被排除
+
+
+def test_full_conditional_fewer_than_two_included_is_nan():
+    # exec 很晚 → 只 1 個報酬日納入 → realized_vol 為 nan
+    dec = _full_decisions([("2020-01-07", 0.0)])
+    dates = pd.to_datetime([f"2020-01-0{i}" for i in range(1, 8)])
+    nav = pd.Series(1.0 + 0.001 * np.arange(7), index=dates)
+    res = full_conditional_realized_vol(dec, nav, threshold=0.10)
+    assert res["n_included"] < 2
+    assert np.isnan(res["realized_vol"])
+
+
 def test_full_conditional_threshold_boundary_inclusive():
     # 造 c == 0.10 的 selection：B 的 w_risky=0.10 且 absmom False
     dec = pd.DataFrame(

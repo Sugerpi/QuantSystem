@@ -12,19 +12,24 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+_DAYS_PER_YEAR = 252
+_SIGMA_STAR = 0.10  # 波動目標 σ*（年化）
+_AC_BAND = 0.02  # AC 容差 ±2%
+
 
 def realized_annual_vol(nav: pd.Series) -> float:
-    """實現年化波動 = std(日報酬, ddof=1) × √252。"""
+    """實現年化波動 = std(日報酬, ddof=1) × √_DAYS_PER_YEAR。"""
     r = nav.pct_change().dropna().to_numpy()
     if len(r) < 2:
         return float("nan")
-    return float(np.std(r, ddof=1) * np.sqrt(252))
+    return float(np.std(r, ddof=1) * np.sqrt(_DAYS_PER_YEAR))
 
 
 def _cash_fraction(absmom_json: str, w_risky_json: str) -> float:
     """該次 selection 的 absmom 轉現金比例 = Σ_{absmom False} w_risky。"""
     absmom = json.loads(absmom_json)
     w_risky = json.loads(w_risky_json)
+    # 缺鍵（absmom 無此 ticker）視為轉現金——full 的 absmom/w_risky 鍵集一致，實務不觸發。
     return float(sum(w for t, w in w_risky.items() if not absmom.get(t, False)))
 
 
@@ -55,7 +60,11 @@ def full_conditional_realized_vol(
     sub = ret[included]
     n_total = int(len(ret))
     n_included = int(included.sum())
-    vol = float(np.std(sub.to_numpy(), ddof=1) * np.sqrt(252)) if n_included >= 2 else float("nan")
+    vol = (
+        float(np.std(sub.to_numpy(), ddof=1) * np.sqrt(_DAYS_PER_YEAR))
+        if n_included >= 2
+        else float("nan")
+    )
     return {
         "realized_vol": vol,
         "n_included": n_included,
@@ -75,7 +84,9 @@ def measure_vol_target_ac(run_dir: str | Path, threshold: float) -> dict:
         return pd.Series(n["nav"].to_numpy(), index=pd.to_datetime(n["date"].to_numpy()))
 
     def _pass(v: float) -> bool:
-        return bool(0.08 <= v <= 0.12) if np.isfinite(v) else False
+        return (
+            bool(_SIGMA_STAR - _AC_BAND <= v <= _SIGMA_STAR + _AC_BAND) if np.isfinite(v) else False
+        )
 
     vt_vol = realized_annual_vol(_nav_of("voltarget_only"))
     full_nav = _nav_of("full")
