@@ -17,7 +17,7 @@
 | 1 | 資料層 | ~1.5 週 | ✅ 完成 |
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ✅ 完成 |
 | 3 | 訊號與組合層 | ~1 週 | ✅ 完成 |
-| 4 | 波動率模型與波動目標 | ~1-2 週 | 🟨 進行中（4a + 4b 完成，4c 待做） |
+| 4 | 波動率模型與波動目標 | ~1-2 週 | ✅ 完成（全 AC 達成） |
 | 5 | DCC 與 ERC | ~1 週 | ⬜ 未開始 |
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ⬜ 未開始 |
 | 7 | Dashboard 與研究報告 | ~2.5 週 | ⬜ 未開始 |
@@ -162,7 +162,7 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ---
 
-## Phase 4 — 波動率模型與波動目標　🟨
+## Phase 4 — 波動率模型與波動目標　✅
 
 依 brainstorming 切三段：**4a 波動率模型層**（✅）、**4b 曝險+策略接線**、4c bootstrap + 七策略消融。
 4b 再切兩段：**4b-1 基礎模組**（exposure/covariance/VolForecaster，✅）、**4b-2 策略+engine 接線**（✅）。
@@ -178,12 +178,13 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 - [x] `models/covariance.py`（過渡滾動相關 Σ=D·R·D，INV-3）— 4b-1（規格未列，`full` 的 σ̂_p 需要）
 - [x] `VolForecaster` refit/filter + 有上界滾動窗（§5.2）— 4b-1
 - [x] `voltarget_only`、`full` 策略、`mom_ivol` 遷移 GARCH、engine log-only 接線 — 4b-2
-- [ ] block bootstrap（stationary，§6.4）— 4c
+- [x] block bootstrap（stationary block，配對差異檢定，§6.4）— 4c
+- [x] 平均曝險、子期間分析、σ*±2% 條件式量測、`momentum_select` 抽取 — 4c
 
-### AC
-- [ ] **已實現波動落 σ*（10%）±2%（條件化重定義，設計 4b-2 §7）**：`voltarget_only`（無 absmom）全期量、落 8-12%（波動目標乾淨測）；`full` 僅在 absmom 大致全過期間量、落 8-12%（隔離波動目標層，因 absmom 轉現金會正確壓低危機期波動、全期量不公平）— 實際量測 4c
+### AC（全部達成 ✅）
+- [x] **已實現波動落 σ*（10%）±2%（條件化重定義，設計 4b-2 §7）**：實測（快照 `2026-07-16_20ed09`）——`voltarget_only`（無 absmom）全期實現波動 **9.64%**；`full` 在 absmom 大致全過期間（轉現金比例 ≤10%，4553/5162 日）**9.86%**、嚴格版（=0，4532 日）**9.86%**——皆落 8-12%，波動目標幾乎精準命中 σ*=10%。
 - [x] **GARCH vs EWMA 的 QLIKE 比較表產出**（4a 達成：GARCH QLIKE 20/20 檔勝 EWMA）
-- [ ] 七策略消融全表產出 — 4c
+- [x] **七策略消融全表產出**（4c 達成：baseline 比較表 + `full` vs 各消融版配對 bootstrap CI；§7.3 敏感度全格另跑）
 
 ### Phase 4a 實作備忘（與原規劃的差異，詳見設計文件 §6）
 1. **QLIKE/MZ-R² 放 `models/volatility/eval.py` 而非 §5.4 字面的 `metrics.py`**：依賴方向（models 不得依賴 backtest）。
@@ -225,6 +226,19 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ### Phase 4b-2 邊界
 七策略齊備（bh_spy/ew_menu/sixty_forty/mom_only/voltarget_only/mom_ivol/full）、GARCH 為預設 vol 來源、曝險機制與 band 落盤完整。**4c 做 block bootstrap + 七策略消融全表 + σ*±2% 條件式量測 + 子期間分析**，屆時 Phase 4 全部 AC 達成。
+
+### Phase 4c 實作備忘（與原規劃的差異，詳見設計文件 `phase4c-*` §8）
+1. **抽 `momentum_select` 共用**（還 4b-2 backlog）：選標的序列從 `MomentumStrategy.decide` 與 `Full._select_and_weight` 兩份複本抽為單一模組函數——消融 apples-to-apples 由結構保證，非靠測試。等價回歸測試保留為防呆。
+2. **stationary block bootstrap 用配對差異檢定**：§6.3 只說「優勢在 CI 下站得住」，未指定做法；對同一組塊索引重抽兩序列取差（非各自 CI 比重疊，後者統計上錯）。RNG 走 `cfg.seed`（INV-6）。
+3. **σ*±2% AC 條件化 + 日層級閾值操作化**：`voltarget_only` 全期乾淨測、`full` 在 absmom 轉現金比例 ≤ `absmom_cash_threshold`(0.10) 的日子量。
+4. **新增 `stats` config 區塊**（bootstrap/子期間/閾值）；`average_exposure` 補入 metrics（§6.4 列為必附但 Phase 2 未含）；`sharpe` 補 n<2 守護（比照 sortino）。
+5. **bootstrap 只對 baseline 格做**（參數格 13×7×1000 過貴，§6.3 驗收只需 baseline 的 full vs 消融版）。
+
+### Phase 4c 實測結果與**誠實科學結論**（快照 `2026-07-16_20ed09`）
+- **σ*±2% AC ✅**：`voltarget_only` 全期 9.64%、`full` 閾值 9.86%/嚴格 9.86%——波動目標幾乎精準命中 σ*=10%。σ* AC 的條件化重定義在此快照期間影響甚微（full 兩版皆 9.86%），因波動目標把組合波動穩在 ~10% 不論 absmom 是否介入——但條件化仍是正確的原則性量測。
+- **消融全表 ✅ 產出**（baseline，依 Sharpe）：`full` MaxDD **−14.4%（全場最佳）**、Calmar **0.51（全場最高）**（vs mom_ivol −26%/0.39、bh_spy −55%/0.20）——回撤控制明顯較好；平均曝險 full 0.72、voltarget_only 0.67、mom_ivol 0.95。
+- **§6.3 誠實結論**：`full` 對**每個**消融版的 Sharpe/Calmar 配對 bootstrap CI **皆含 0**（`excludes_zero=False`）——優勢在 95% 區間下**不顯著**。point estimate 偏向 full（尤其 Calmar/回撤），但 stationary block bootstrap 下未達統計顯著。**這是 §6.3 明言的合格結論**（「無顯著貢獻也是合格、甚至更誠實」）：波動目標層改善回撤（point estimate）、但本樣本期未證明其對風險調整報酬有統計顯著貢獻。§7.3 完整敏感度格的穩健性見下方變更紀錄補記。
+- 七策略消融 + σ*±2% 量測以 `requires_snapshot` 本機閘門 `test_phase4_ac.py` 守護（CI 無快照乾淨 skip，比照 Phase 2 AC-3）。
 
 ---
 
@@ -288,3 +302,4 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-22：**Phase 4a 波動率模型層完成**——`VolatilityModel` ABC（base.py，×100 估計/÷100² 還原與 α+β<1 檢查的單一出口，INV-4）、GARCH(1,1)-t via arch（解析多步）、EWMA(λ=0.94)（消融基線 + GARCH fallback）、多步年化聚合、`fit_volatility`（GARCH 失敗退回 EWMA + 標記）、QLIKE/MZ-R² 純函數與 walk-forward 評估驅動。**AC「GARCH vs EWMA QLIKE 比較表」達成**：真實快照 20 檔上 GARCH QLIKE 全面（20/20）勝 EWMA、MZ-R² 17/20 較高；共 241 次 fallback（HYG ~55% 最高）誠實留痕。全套測試 212 項綠。以 subagent-driven TDD 執行 11 個 task，實質程式模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-4 守護測試**（`test_garch_conventions.py`——CLAUDE.md 早列它為 INV-4 守護，但檔案一直不存在，INV-4 至此才真正有測試守護）。邊界：未碰 engine/策略，`mom_ivol` 仍用 rolling_std（待 4b 遷移）。6 處規格偏離見上方 Phase 4a 備忘。**4a 完成，Phase 4 尚有 4b（曝險+策略）/4c（bootstrap+消融）**。4a 完成後推 `feature/phase4-volatility` 至 origin 當雲端檢查點。
 - 2026-07-22：**Phase 4b-1 基礎模組完成**——`portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口；帶只作用於曝險檢查日）、`models/covariance.py`（過渡滾動樣本相關 Σ=D·R·D，投影 R 保 PSD+對角線=個別變異數，INV-3）、`VolForecaster`（refit/filter 分離 + 有上界滾動窗 `garch_window`=1000，成本 O(cap) 不爆炸）、`garch_filter_forecast`（arch `fix()` 固定參數濾波）。全套測試 242 項綠。以 subagent-driven TDD 執行 7 個 task，實質模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-3 守護測試**（`test_covariance_valid.py`——與 INV-4 同，CLAUDE.md 早列卻不存在；經 mutation 驗證有牙齒）。過程 review 補強：covariance 出口拒絕非有限 R、GARCH `arch_model` 規格單一來源、filter 補守護、cache 改 dataclass。邊界：未碰 engine/策略，待 4b-2 組裝（含 stale-cache 呼叫端契約）。4 處規格偏離見上方 Phase 4b-1 備忘。
 - 2026-07-22：**Phase 4b-2 策略 + engine 接線完成**——engine log-only decision（`Decision.execute`：band-blocked 曝險檢查落診斷不交易，§1.7/§6.2）、`VolTargetStrategy` 曝險機制基底（selection refit / exposure-check filter / build_covariance→portfolio_vol→target_exposure→最終權重）、`voltarget_only`（SPY，波動目標乾淨測）、`full`（動量+inverse-vol+absmom+波動目標，§1.6 Step 3 權重公式）、`mom_ivol` 遷移到 GARCH σ̂（與 full 同估計器，消融 apples-to-apples）、`Diagnostics` 決策當下記 `vol_fell_back`/`garch_params`（§6.2）、config `corr_window`(252) + `vol_model` 預設翻 `garch_arch`（§5.2 GARCH 轉正）。**七策略齊備**。全套測試 270 項綠。以 subagent-driven TDD 執行 12 個 task，實質模組經 spec + code-quality 兩段式 review。過程 review 補強：VolForecaster eager spec 驗證、forecast_selected 共用 helper、log-only pd.isna 契約。**σ*±2% AC 條件化重定義**（voltarget_only 全期 / full 限 absmom 大致全過期間，隔離波動目標層）。6 處規格偏離見上方 Phase 4b-2 備忘。**邊界：4c 做 bootstrap + 七策略消融全表 + σ*±2% 條件式量測**。
+- 2026-07-24：**Phase 4c 完成，Phase 4 全部 AC 達成**——抽 `momentum_select` 共用（消融選擇由結構保證一致）、stationary block bootstrap（配對差異檢定 full vs 消融版，seed 走 config 守 INV-6）、平均曝險、子期間分析（2005-09/2010-19/2020-）、σ*±2% 條件式量測（`vol_target_ac.py` 讀 run 產物、日層級閾值子集）、七策略消融全表 + baseline 配對 bootstrap。全套測試 300 綠（+ `requires_snapshot` 本機 AC 閘門）。以 subagent-driven TDD 執行 10 個 task。**AC 實測**：voltarget_only 全期實現波動 9.64%、full 閾值/嚴格版 9.86%（皆落 σ*=10%±2%）；七策略消融表產出。**誠實科學結論**：full 的 MaxDD −14.4%/Calmar 0.51 為全場最佳（回撤控制明顯較好），但對每個消融版的 Sharpe/Calmar 配對 bootstrap CI 皆含 0（優勢不顯著）——§6.3 明言的合格結論，波動目標層在本樣本期未證明對風險調整報酬有統計顯著貢獻。5 處規格偏離見上方 Phase 4c 備忘。**Phase 4 全部 AC 達成 ✅**，消融結果即研究報告骨架。
