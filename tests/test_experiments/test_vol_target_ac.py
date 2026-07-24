@@ -65,6 +65,22 @@ def test_full_conditional_days_before_first_selection_excluded():
     assert 0 < res["n_included"] < res["n_total"]  # 01-05 之前的日子被排除
 
 
+def test_full_conditional_execution_day_governed_by_previous_selection():
+    # 引擎順序損益→漂移→執行（engine.py:62,65-69）：某日 t 的報酬由「進入 t 的權重」
+    # earned，即 execution_date 嚴格 < t 的最後一次 selection；t 當日剛執行的新權重要到
+    # t+1 才生效。故 t == execution_date 的報酬歸屬於「前一次」selection，不是剛執行的那次。
+    #
+    # exec 01-02(c=0.5 失敗)、exec 01-05(c=0.0 通過)。焦點日 01-05：其報酬由「執行前」
+    # 權重（= 01-02 的失敗選擇）earned → 必須排除。
+    dec = _full_decisions([("2020-01-02", 0.5), ("2020-01-05", 0.0)])
+    dates = pd.to_datetime([f"2020-01-0{i}" for i in range(1, 8)])
+    nav = pd.Series(1.0 + 0.001 * np.arange(7), index=dates)
+    res = full_conditional_realized_vol(dec, nav, threshold=0.10)
+    # 正確（side="left"）：01-05 歸 01-02(c=0.5) → 排除；只 01-06,01-07 歸 01-05(c=0) → n=2。
+    # 錯誤（side="right"）會把 01-05 錯歸給剛執行的 01-05(c=0) → 納入 → n=3。
+    assert res["n_included"] == 2
+
+
 def test_full_conditional_fewer_than_two_included_is_nan():
     # exec 很晚 → 只 1 個報酬日納入 → realized_vol 為 nan
     dec = _full_decisions([("2020-01-07", 0.0)])

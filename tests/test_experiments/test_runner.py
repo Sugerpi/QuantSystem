@@ -64,6 +64,26 @@ def test_all_strategies_share_the_same_nav_start_date(tmp_path):
     assert starts.nunique() == 1
 
 
+def test_metrics_json_carries_subperiod_analysis(tmp_path):
+    """§6.4 子期間分析須實際產出：metrics.json 每策略含 subperiods 分解，
+    每個 config 子期間一格（有資料格帶完整 metrics、空格為 n_days=0）。"""
+    cfg = _cfg()
+    cfg.stats = cfg.stats.model_copy(update={"subperiods": [(2020, 2020), (2021, 2021)]})
+    d = run_experiment(
+        cfg=cfg,
+        snapshot=_snap(),  # make_dates 自 2020-01-02 起 → 全落在 2020
+        out_root=tmp_path,
+        label="test",
+        strategy_ids=["bh_spy", "ew_menu"],
+        now=pd.Timestamp("2026-07-17T14:32:11"),
+    )
+    metrics = json.loads((d / "metrics.json").read_text(encoding="utf-8"))
+    sub = metrics["bh_spy"]["subperiods"]
+    assert set(sub) == {"2020-2020", "2021-2021"}
+    assert sub["2020-2020"]["n_days"] > 0 and "sharpe" in sub["2020-2020"]  # 有資料
+    assert sub["2021-2021"] == {"n_days": 0}  # 無資料格
+
+
 def test_decisions_carry_null_model_columns(tmp_path):
     """Phase 2 無模型，欄位須存在但為 null（設計文件 §0、§4）。"""
     d = run_experiment(

@@ -18,7 +18,7 @@ import pandas as pd
 
 from quantcore.backtest.clock import EventClock
 from quantcore.backtest.engine import run_strategy
-from quantcore.backtest.metrics import compute_metrics
+from quantcore.backtest.metrics import compute_metrics, subperiod_metrics
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.config import QuantConfig, load_config
 from quantcore.data.hashing import config_hash
@@ -122,6 +122,13 @@ def run_experiment(
             total_turnover=float(nav_df["turnover"].sum()),
             total_cost=float(nav_df["cost"].sum()),
             weights=w_df,
+        )
+        # §6.4 子期間分析：動量績效高度 regime 依賴，單一全期數字會說謊，故切子期間分報。
+        dated_idx = pd.DatetimeIndex(nav_df["date"])
+        metrics[s.strategy_id]["subperiods"] = subperiod_metrics(
+            nav=pd.Series(nav_df["nav"].to_numpy(), index=dated_idx),
+            rate_daily=pd.Series(rate.to_numpy(), index=dated_idx),
+            subperiods=cfg.stats.subperiods,
         )
 
     run_dir = create_run_dir(out_root, label, now)

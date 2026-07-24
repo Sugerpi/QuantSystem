@@ -240,6 +240,12 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 - **§6.3 誠實結論**：`full` 對**每個**消融版的 Sharpe/Calmar 配對 bootstrap CI **皆含 0**（`excludes_zero=False`）——優勢在 95% 區間下**不顯著**。point estimate 偏向 full（尤其 Calmar/回撤），但 stationary block bootstrap 下未達統計顯著。**這是 §6.3 明言的合格結論**（「無顯著貢獻也是合格、甚至更誠實」）：波動目標層改善回撤（point estimate）、但本樣本期未證明其對風險調整報酬有統計顯著貢獻。§7.3 完整敏感度格的穩健性見下方變更紀錄補記。
 - 七策略消融 + σ*±2% 量測以 `requires_snapshot` 本機閘門 `test_phase4_ac.py` 守護（CI 無快照乾淨 skip，比照 Phase 2 AC-3）。
 
+### Phase 4 最終 holistic review 後修正（merge 前）
+- **σ*±2% 條件式量測的管轄選擇 off-by-one（AC 頭號交付物的 correctness bug）**：`full_conditional_realized_vol` 原以 `searchsorted(side="right") - 1`（最後一個 exec ≤ 報酬日）決定某報酬日由哪次 selection 治。但引擎 within-day 順序為**損益→漂移→執行→決策**（`engine.py:62,65-69`、docstring 明述刻意把損益排在執行前「以免新權重賺到它生效之前的報酬」）——故某日 t 的報酬由「進入 t 的權重」earned，即 execution_date **嚴格 < t** 的最後一次 selection；t 當日剛執行的新權重要到 t+1 才生效。`≤` 把「執行當日」的報酬錯歸給剛執行的那次選擇。已改 `side="left"`。此缺陷逐 task review 看不到（reader 的 `≤` 自洽、有測試、且與設計 §4「execution_date ≤ 該日」字面一致），僅把 reader 對上引擎的「報酬先於執行」慣例才現形。**AC 閘門 `test_phase4_ac.py` 重跑通過**（559s，`full_threshold` 仍落 σ*±2% 的 8-12%）——修正只重歸屬「每個 selection 邊界一天」的報酬，餘裕寬故不翻盤；量測管轄自此與引擎慣例一致。
+  - 附帶：原本隨此 bug 一起交付的「防呆」測試 left/right 都給同一個 count（兩邊界日互相抵消）、**無鑑別力**；已替換為跨邊界錯歸的鑑別性測試（前選失敗、後選通過，焦點日為後選執行日，正確須排除 → `side="right"` 得 3、`side="left"` 得 2），先驗 RED 再修 GREEN。
+- **子期間分析（§6.4「子期間分析產出」AC）無消費者**：`subperiod_metrics` 函數建了、測了，卻**沒有任何呼叫端**——AC 名列「產出」但實際沒產出。已接線進 `runner.py`：每策略的 metrics 加一個 `subperiods` 分解（依 `cfg.stats.subperiods` 切年），隨 `metrics.json` 落地、被 INV-6 content hash 自然覆蓋；不動 `write_artifacts` 簽名。新增 `test_runner.py::test_metrics_json_carries_subperiod_analysis`（有資料格帶完整 metrics、空格 `n_days=0`），先驗 RED 再修 GREEN。
+- 全套件本機 303 passed / 0 skip（含 `requires_snapshot` 閘門，本機快照有 parquet）。
+
 ---
 
 ## Phase 5 — DCC 與 ERC　⬜

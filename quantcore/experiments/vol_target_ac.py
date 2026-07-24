@@ -54,8 +54,9 @@ def full_conditional_realized_vol(
 
     ret = nav.pct_change().dropna()
     ret_days = ret.index.to_numpy()
-    # 每個報酬日的管轄 selection = 最後一個 exec ≤ 該日
-    ret_pos = np.searchsorted(exec_dates, ret_days, side="right") - 1
+    # side="left"：引擎順序為 損益→漂移→執行→決策，故某日的報酬由「執行前」權重 earned
+    # （前一次選擇）。剛執行的新權重要到 execution_date+1 才生效，故取嚴格 < 該日的最後選擇。
+    ret_pos = np.searchsorted(exec_dates, ret_days, side="left") - 1
     included = np.array([p >= 0 and cash_fracs[p] <= threshold for p in ret_pos])
     sub = ret[included]
     n_total = int(len(ret))
