@@ -77,6 +77,7 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
             rate_daily=rate.reset_index(drop=True),
             total_turnover=float(nav_df["turnover"].sum()),
             total_cost=float(nav_df["cost"].sum()),
+            weights=_w,
         )
     return result
 

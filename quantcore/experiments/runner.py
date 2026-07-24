@@ -121,6 +121,7 @@ def run_experiment(
             rate_daily=rate.reset_index(drop=True),
             total_turnover=float(nav_df["turnover"].sum()),
             total_cost=float(nav_df["cost"].sum()),
+            weights=w_df,
         )
 
     run_dir = create_run_dir(out_root, label, now)

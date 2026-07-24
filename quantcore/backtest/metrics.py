@@ -8,6 +8,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from quantcore.backtest.accounting import CASH
+
 _DAYS_PER_YEAR = 252
 _BPS = 10_000.0
 # 「零變異」判斷用的容忍值：對重複的常數浮點數陣列取 mean 再相減，
@@ -154,8 +156,19 @@ def paired_metric_diff_ci(
     return {"point": point, "lo": lo, "hi": hi, "excludes_zero": bool(lo > 0 or hi < 0)}
 
 
+def average_exposure(weights: pd.DataFrame) -> float:
+    """平均風險曝險 = mean over days of (1 − CASH 權重)。weights 為單一策略的長格式。"""
+    non_cash = weights[weights["ticker"] != CASH]
+    daily = non_cash.groupby("date")["weight"].sum()
+    return float(daily.mean())
+
+
 def compute_metrics(
-    nav: pd.Series, rate_daily: pd.Series, total_turnover: float, total_cost: float
+    nav: pd.Series,
+    rate_daily: pd.Series,
+    total_turnover: float,
+    total_cost: float,
+    weights: pd.DataFrame | None = None,
 ) -> dict[str, float]:
     """§6.4 的彙總統計。nav 與 rate_daily 須等長且同序。"""
     ret = nav.pct_change().fillna(0.0)
@@ -172,4 +185,5 @@ def compute_metrics(
         if years > 0
         else float("nan"),
         "n_days": n,
+        "average_exposure": average_exposure(weights) if weights is not None else None,
     }

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
+import pytest
 
+from quantcore.backtest.accounting import CASH
 from quantcore.backtest.metrics import (
+    average_exposure,
     bootstrap_metric_ci,
+    compute_metrics,
     metric_calmar,
     metric_sharpe,
     paired_metric_diff_ci,
@@ -106,3 +111,36 @@ def test_block_structure_continuation_ratio():
                 cont += 1
     ratio = cont / total
     assert abs(ratio - (1 - 1 / mb)) < 0.03
+
+
+def test_average_exposure_hand_computation():
+    # 兩天：day1 風險 0.6（cash 0.4），day2 風險 1.0（cash 0）→ 平均 0.8
+    w = pd.DataFrame(
+        [
+            {"date": "d1", "ticker": "A", "weight": 0.6},
+            {"date": "d1", "ticker": CASH, "weight": 0.4},
+            {"date": "d2", "ticker": "A", "weight": 1.0},
+            {"date": "d2", "ticker": CASH, "weight": 0.0},
+        ]
+    )
+    assert average_exposure(w) == pytest.approx(0.8)
+
+
+def test_compute_metrics_average_exposure_none_without_weights():
+    nav = pd.Series([1.0, 1.01, 1.02])
+    rate = pd.Series([0.0001, 0.0001, 0.0001])
+    m = compute_metrics(nav, rate, total_turnover=0.0, total_cost=0.0)
+    assert m["average_exposure"] is None
+
+
+def test_compute_metrics_average_exposure_from_weights():
+    nav = pd.Series([1.0, 1.01, 1.02])
+    rate = pd.Series([0.0001, 0.0001, 0.0001])
+    w = pd.DataFrame(
+        [
+            {"date": "d1", "ticker": "A", "weight": 0.5},
+            {"date": "d1", "ticker": CASH, "weight": 0.5},
+        ]
+    )
+    m = compute_metrics(nav, rate, 0.0, 0.0, weights=w)
+    assert m["average_exposure"] == pytest.approx(0.5)
