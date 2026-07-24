@@ -9,10 +9,9 @@ from abc import abstractmethod
 
 from quantcore.backtest.accounting import CASH
 from quantcore.backtest.ptview import PointInTimeView
+from quantcore.backtest.strategies.momentum_selection import momentum_select
 from quantcore.backtest.strategy import Decision, DecisionEvent, Diagnostics, Strategy
-from quantcore.portfolio.selection import eligible_assets, select_top_k
 from quantcore.portfolio.weighting import route_absmom_to_cash
-from quantcore.signals.momentum import absolute_momentum, cross_sectional_momentum
 
 
 class MomentumStrategy(Strategy):
@@ -26,20 +25,12 @@ class MomentumStrategy(Strategy):
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
         if event is not DecisionEvent.SELECTION:
             return None
-        cfg = self._cfg
-        # 此選標的序列與 Full._select_and_weight 相同（見該處註解）；改動須同步兩處。
-        elig = eligible_assets(view.prices, cfg.universe.menu, cfg.universe.min_history_days)
-        scores = cross_sectional_momentum(
-            view.prices, cfg.signal.momentum_lookback, cfg.signal.momentum_skip
-        )
-        scores = {t: v for t, v in scores.items() if t in elig}
-        if not scores:
+        sel = momentum_select(view, self._cfg)
+        if sel is None:
             return None
-        selected = select_top_k(scores, cfg.signal.top_k)
+        elig, scores, selected, absmom = sel.eligible, sel.scores, sel.selected, sel.absmom
         w_risky, sigma_hat = self._risky_weights(selected, view)
         garch_params, fell_back = self._vol_diagnostics(selected)
-        absmom_all = absolute_momentum(view.prices, view.rates, cfg.signal.momentum_lookback)
-        absmom = {t: bool(absmom_all.get(t, False)) for t in selected}
         weights, cash = route_absmom_to_cash(w_risky, absmom)
         target = {**weights, CASH: cash}
         return Decision(
