@@ -29,6 +29,10 @@ def annualized_return(nav: pd.Series) -> float:
 def sharpe(ret: pd.Series, rf_daily: pd.Series) -> float:
     """年化 Sharpe，超額於 DTB3（§6.4）。超額報酬無變異時回 nan。"""
     e = ret.to_numpy() - rf_daily.to_numpy()
+    if e.size < 2:
+        # ddof=1 樣本標準差在 n<2 時無定義（分母為 0）；
+        # 提早回 nan，避免 numpy 除以零警告（比照 sortino）。
+        return float("nan")
     sd = e.std(ddof=1)
     if sd < _ZERO_VAR_TOL:
         return 0.0 if abs(e.mean()) < _ZERO_VAR_TOL else float("nan")
