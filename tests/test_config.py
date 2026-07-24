@@ -178,3 +178,19 @@ def test_risk_corr_window_loaded():
 def test_default_vol_model_is_garch_arch():
     cfg = load_config("quantcore/config/default.yaml")
     assert cfg.risk.vol_model == "garch_arch"
+
+
+def test_stats_config_loaded():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.stats.bootstrap_mean_block == 21
+    assert cfg.stats.bootstrap_reps == 1000
+    assert cfg.stats.bootstrap_alpha == 0.05
+    assert cfg.stats.absmom_cash_threshold == 0.10
+    assert [tuple(p) for p in cfg.stats.subperiods] == [(2005, 2009), (2010, 2019), (2020, 9999)]
+
+
+def test_stats_subperiod_start_le_end():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY"], stats={"subperiods": [[2020, 2010]]})  # start > end
