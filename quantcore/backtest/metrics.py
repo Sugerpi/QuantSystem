@@ -8,6 +8,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from quantcore.backtest.accounting import CASH
+
 _DAYS_PER_YEAR = 252
 _BPS = 10_000.0
 # 「零變異」判斷用的容忍值：對重複的常數浮點數陣列取 mean 再相減，
@@ -27,6 +29,10 @@ def annualized_return(nav: pd.Series) -> float:
 def sharpe(ret: pd.Series, rf_daily: pd.Series) -> float:
     """年化 Sharpe，超額於 DTB3（§6.4）。超額報酬無變異時回 nan。"""
     e = ret.to_numpy() - rf_daily.to_numpy()
+    if e.size < 2:
+        # ddof=1 樣本標準差在 n<2 時無定義（分母為 0）；
+        # 提早回 nan，避免 numpy 除以零警告（比照 sortino）。
+        return float("nan")
     sd = e.std(ddof=1)
     if sd < _ZERO_VAR_TOL:
         return 0.0 if abs(e.mean()) < _ZERO_VAR_TOL else float("nan")
@@ -67,8 +73,106 @@ def annualized_turnover(total_turnover: float, n_days: int) -> float:
     return float(total_turnover * _DAYS_PER_YEAR / n_days)
 
 
+def stationary_bootstrap_indices(
+    n: int, mean_block: int, n_reps: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Politis-Romano stationary bootstrap 索引矩陣 (n_reps, n)。
+
+    每步以機率 1/mean_block 跳到新隨機起點，否則沿用前一索引 +1（circular wrap）。
+    日報酬有自相關，iid 重抽的 CI 系統性偏窄（§6.4），故用 stationary bootstrap。
+    RNG 由呼叫端以 cfg.seed 建立（INV-6）。
+    """
+    if n < 1 or mean_block < 1 or n_reps < 1:
+        raise ValueError("n/mean_block/n_reps 皆須 ≥ 1")
+    p = 1.0 / mean_block
+    idx = np.empty((n_reps, n), dtype=np.int64)
+    for r in range(n_reps):
+        i = int(rng.integers(0, n))
+        idx[r, 0] = i
+        for t in range(1, n):
+            i = int(rng.integers(0, n)) if rng.random() < p else (i + 1) % n
+            idx[r, t] = i
+    return idx
+
+
+def _nav_from_returns(r: np.ndarray) -> pd.Series:
+    """由日報酬重建 NAV（起始 1.0）。供 Calmar/MaxDD 的 bootstrap 一致計算。"""
+    return pd.Series(np.concatenate([[1.0], np.cumprod(1.0 + np.asarray(r, dtype="float64"))]))
+
+
+def metric_sharpe(r: np.ndarray, rf: np.ndarray) -> float:
+    """報酬陣列版 Sharpe（供 bootstrap）。"""
+    return sharpe(pd.Series(r), pd.Series(rf))
+
+
+def metric_calmar(r: np.ndarray, rf: np.ndarray) -> float:
+    """報酬陣列版 Calmar（供 bootstrap；rf 未用）。"""
+    return calmar(_nav_from_returns(r))
+
+
+def _percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
+    """雙尾百分位 CI (lo, hi)。剔除非有限後若無樣本則回 (nan, nan)——避免 np.percentile 崩潰。"""
+    finite = samples[np.isfinite(samples)]
+    if finite.size == 0:
+        return float("nan"), float("nan")
+    lo = float(np.percentile(finite, 100 * alpha / 2))
+    hi = float(np.percentile(finite, 100 * (1 - alpha / 2)))
+    return lo, hi
+
+
+def bootstrap_metric_ci(
+    returns: np.ndarray,
+    rf: np.ndarray,
+    metric_fn,
+    indices: np.ndarray,
+    alpha: float = 0.05,
+) -> tuple[float, float, float]:
+    """單一策略指標的百分位 CI。回 (point, lo, hi)。非有限重抽值剔除。"""
+    r = np.asarray(returns, dtype="float64")
+    f = np.asarray(rf, dtype="float64")
+    stats = np.array([metric_fn(r[ix], f[ix]) for ix in indices])
+    # 非有限重抽（如 Calmar 對零回撤 resample 回 nan）被剔除：
+    # CI 為「條件於有定義的 resample」的覆蓋。
+    lo, hi = _percentile_ci(stats, alpha)
+    return float(metric_fn(r, f)), lo, hi
+
+
+def paired_metric_diff_ci(
+    returns_a: np.ndarray,
+    returns_b: np.ndarray,
+    rf: np.ndarray,
+    metric_fn,
+    indices: np.ndarray,
+    alpha: float = 0.05,
+) -> dict[str, float | bool]:
+    """配對差異 CI：對兩序列抽**同一組**索引，逐次算 metric(a)−metric(b)（§6.3）。
+
+    回 {point, lo, hi, excludes_zero}。CI 不含 0 才算「優勢站得住」。
+    """
+    a = np.asarray(returns_a, dtype="float64")
+    b = np.asarray(returns_b, dtype="float64")
+    f = np.asarray(rf, dtype="float64")
+    diffs = np.array([metric_fn(a[ix], f[ix]) - metric_fn(b[ix], f[ix]) for ix in indices])
+    # 非有限重抽（如 Calmar 對零回撤 resample 回 nan）被剔除：
+    # CI 為「條件於有定義的 resample」的覆蓋。
+    lo, hi = _percentile_ci(diffs, alpha)
+    point = float(metric_fn(a, f) - metric_fn(b, f))
+    return {"point": point, "lo": lo, "hi": hi, "excludes_zero": bool(lo > 0 or hi < 0)}
+
+
+def average_exposure(weights: pd.DataFrame) -> float:
+    """平均風險曝險 = mean over days of (1 − CASH 權重)。weights 為單一策略的長格式。"""
+    non_cash = weights[weights["ticker"] != CASH]
+    daily = non_cash.groupby("date")["weight"].sum()
+    return float(daily.mean())
+
+
 def compute_metrics(
-    nav: pd.Series, rate_daily: pd.Series, total_turnover: float, total_cost: float
+    nav: pd.Series,
+    rate_daily: pd.Series,
+    total_turnover: float,
+    total_cost: float,
+    weights: pd.DataFrame | None = None,
 ) -> dict[str, float]:
     """§6.4 的彙總統計。nav 與 rate_daily 須等長且同序。"""
     ret = nav.pct_change().fillna(0.0)
@@ -85,4 +189,31 @@ def compute_metrics(
         if years > 0
         else float("nan"),
         "n_days": n,
+        "average_exposure": average_exposure(weights) if weights is not None else None,
     }
+
+
+def subperiod_metrics(
+    nav: pd.Series,
+    rate_daily: pd.Series,
+    subperiods: list[tuple[int, int]],
+) -> dict[str, dict[str, float]]:
+    """對每個 (start_year, end_year) 子期間跑 compute_metrics（§6.4）。
+
+    nav/rate_daily 須以 DatetimeIndex 索引。回 {"start-end": metrics}。
+    動量策略績效高度 regime 依賴，單一全期數字會說謊，故切子期間分別量。
+    """
+    years = nav.index.year
+    out: dict[str, dict[str, float]] = {}
+    for start, end in subperiods:
+        mask = (years >= start) & (years <= end)
+        key = f"{start}-{end}"
+        if not mask.any():
+            out[key] = {"n_days": 0}
+            continue
+        sub_nav = nav[mask].reset_index(drop=True)
+        sub_rate = rate_daily[mask].reset_index(drop=True)
+        out[key] = compute_metrics(
+            sub_nav, sub_rate, total_turnover=float("nan"), total_cost=float("nan")
+        )
+    return out

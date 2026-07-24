@@ -101,3 +101,12 @@ def test_sixty_forty_no_action_on_exposure_check():
     cfg = make_cfg(["SPY", "IEF"], signal={"top_k": 2})
     strat = STRATEGIES["sixty_forty"](cfg)
     assert strat.decide(make_view(snap, dates[-1]), DecisionEvent.EXPOSURE_CHECK) is None
+
+
+def test_full_and_voltarget_only_registered():
+    from quantcore.backtest.strategies import STRATEGIES
+
+    assert "full" in STRATEGIES
+    assert "voltarget_only" in STRATEGIES
+    assert STRATEGIES["full"].strategy_id == "full"
+    assert STRATEGIES["voltarget_only"].strategy_id == "voltarget_only"

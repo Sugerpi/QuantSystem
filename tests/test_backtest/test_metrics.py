@@ -64,5 +64,6 @@ def test_compute_metrics_returns_all_keys():
         "annualized_turnover",
         "cost_drag_bps_per_year",
         "n_days",
+        "average_exposure",
     }
     assert m["n_days"] == n

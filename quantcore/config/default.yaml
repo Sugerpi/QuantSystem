@@ -17,12 +17,16 @@ signal:                             # §1.3 橫斷面 12-1 動量
   top_k: 5
 
 risk:                               # §1.6 / §5
-  vol_model: rolling_std            # Phase 3 暫定（唯一實作）；Phase 4 → garch_arch。garch_arch | garch_own | ewma | rolling_std
+  vol_model: garch_arch              # §5.2 GARCH(1,1)-t 轉正，生產路徑。garch_arch | garch_own | ewma | rolling_std
   corr_model: dcc                   # dcc | ewma
   vol_target_annual: 0.10           # σ* 年化波動目標
   exposure_band: 0.10               # 曝險更新帶
   exposure_min: 0.10                # E_min
   vol_window: 63                    # rolling_std 滾動窗（交易日），Phase 3 placeholder
+  ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
+  forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
+  garch_window: 1000                # GARCH 估計滾動窗上限（交易日，~4 年）；界定每次 fit 成本 O(cap)
+  corr_window: 252                  # §1.6 滾動樣本相關窗（交易日）；≫ top_k 保 R 滿秩，可消融 {126,252}
 
 schedule:                           # §1.7 再平衡時程
   selection_interval: 21
@@ -42,3 +46,13 @@ data_quality:                       # §4.3 / §4.5 資料品質門檻
 backtest:
   start: 2005-01-03                 # §1.1 建議起點
   initial_nav: 1.0                  # 尺度不變，不影響任何指標
+
+stats:                               # §6.4 績效統計參數
+  bootstrap_mean_block: 21           # stationary bootstrap 平均塊長（交易日）
+  bootstrap_reps: 1000               # 重抽次數
+  bootstrap_alpha: 0.05              # 百分位 CI 雙尾水準
+  absmom_cash_threshold: 0.10        # full 的 σ* 量測納入閾值（absmom 轉現金比例上限）
+  subperiods:                        # 子期間切點（起始年，含）
+    - [2005, 2009]
+    - [2010, 2019]
+    - [2020, 9999]

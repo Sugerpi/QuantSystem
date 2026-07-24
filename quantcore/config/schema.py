@@ -61,6 +61,10 @@ class RiskConfig(_Strict):
     vol_window: int = Field(
         gt=0
     )  # rolling_std 的滾動窗（交易日）；Phase 4 GARCH 取代後仍保留供 EWMA/基線
+    ewma_lambda: float = Field(gt=0, lt=1)  # §5.3 RiskMetrics EWMA 衰減；也是 GARCH fallback
+    forecast_horizon: int = Field(gt=0)  # §1.6 Step 1 的 H，對齊 selection_interval
+    garch_window: int = Field(ge=100)  # GARCH 估計滾動窗上限（交易日）；≥ GarchArch._min_obs
+    corr_window: int = Field(ge=2)  # 滾動樣本相關窗（交易日）；實務 ≫ top_k 保 R 滿秩
 
 
 class ScheduleConfig(_Strict):
@@ -96,6 +100,23 @@ class BacktestConfig(_Strict):
     # 數字大小改變。仍入 config 以維持「參數只在 config」這條明線。
 
 
+class StatsConfig(_Strict):
+    """績效統計參數（規格 §6.4）。"""
+
+    bootstrap_mean_block: int = Field(ge=1)  # stationary bootstrap 平均塊長（交易日）
+    bootstrap_reps: int = Field(ge=1)  # 重抽次數
+    bootstrap_alpha: float = Field(gt=0, lt=1)  # 百分位 CI 雙尾水準
+    absmom_cash_threshold: float = Field(ge=0, le=1)  # full 的 σ* 量測納入閾值
+    subperiods: list[tuple[int, int]] = Field(min_length=1)  # (start_year, end_year) 含
+
+    @model_validator(mode="after")
+    def _subperiods_valid(self) -> StatsConfig:
+        for start, end in self.subperiods:
+            if start > end:
+                raise ValueError(f"子期間 start({start}) > end({end})")
+        return self
+
+
 class QuantConfig(_Strict):
     """全系統設定根物件（規格 §7.2）。"""
 
@@ -108,6 +129,7 @@ class QuantConfig(_Strict):
     costs: CostsConfig
     data_quality: DataQualityConfig
     backtest: BacktestConfig
+    stats: StatsConfig
 
     @model_validator(mode="after")
     def _top_k_within_menu(self) -> QuantConfig:
@@ -119,6 +141,8 @@ class QuantConfig(_Strict):
 
     @model_validator(mode="after")
     def _vol_window_fits_available_history(self) -> QuantConfig:
+        if self.risk.vol_model != "rolling_std":
+            return self  # vol_window 僅 rolling_std 使用；其他模型不受此約束
         # 入選資產至少有 max(min_history_days, momentum_lookback+1) 根 bar
         # （須同時通過 eligibility 與動量計分）。滿窗需 vol_window+1 根，
         # 此約束確保滾動波動窗永遠為滿窗、不致靜默退化為較少樣本。

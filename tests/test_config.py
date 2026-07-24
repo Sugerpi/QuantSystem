@@ -20,7 +20,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.signal.momentum_lookback == 252
     assert cfg.signal.momentum_skip == 21
     assert cfg.risk.vol_target_annual == 0.10
-    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_model == "garch_arch"
     assert cfg.backtest.start == date(2005, 1, 3)
     assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
@@ -99,9 +99,9 @@ def test_backtest_initial_nav_rejects_non_positive(tmp_path):
         load_config(p)
 
 
-def test_rolling_std_vol_model_and_window_load():
+def test_vol_model_and_window_load():
     cfg = load_config(DEFAULT_YAML)
-    assert cfg.risk.vol_model == "rolling_std"
+    assert cfg.risk.vol_model == "garch_arch"
     assert cfg.risk.vol_window == 63
 
 
@@ -114,6 +114,7 @@ def test_vol_window_must_be_positive():
 
 def test_vol_window_exceeding_available_history_rejected():
     raw = _valid_dict()
+    raw["risk"]["vol_model"] = "rolling_std"  # 此約束僅 rolling_std 適用
     floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
     raw["risk"]["vol_window"] = floor  # vol_window+1 > floor → 無法滿窗
     with pytest.raises(ValidationError):
@@ -122,6 +123,74 @@ def test_vol_window_exceeding_available_history_rejected():
 
 def test_vol_window_at_available_floor_accepted():
     raw = _valid_dict()
+    raw["risk"]["vol_model"] = "rolling_std"  # 此約束僅 rolling_std 適用
     floor = max(raw["universe"]["min_history_days"], raw["signal"]["momentum_lookback"] + 1)
     raw["risk"]["vol_window"] = floor - 1  # 剛好滿窗 → 應通過
     QuantConfig.model_validate(raw)  # 不應拋錯
+
+
+def test_vol_window_constraint_only_applies_to_rolling_std():
+    from tests.fixtures.synthetic import make_cfg
+
+    # garch_arch + 大 vol_window（超過 momentum floor）應通過——vol_window 對 garch_arch 無意義
+    make_cfg(["SPY", "TLT"], risk={"vol_model": "garch_arch", "vol_window": 10_000})
+
+
+def test_risk_ewma_lambda_and_horizon_loaded():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.risk.ewma_lambda == 0.94
+    assert cfg.risk.forecast_horizon == 21
+
+
+def test_risk_ewma_lambda_must_be_open_unit_interval():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"ewma_lambda": 1.0})
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"ewma_lambda": 0.0})
+
+
+def test_risk_forecast_horizon_must_be_positive():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"forecast_horizon": 0})
+
+
+def test_risk_garch_window_loaded():
+    cfg = load_config(DEFAULT_YAML)
+    assert cfg.risk.garch_window == 1000
+
+
+def test_risk_garch_window_must_be_at_least_min_obs():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY", "TLT"], risk={"garch_window": 50})  # < 100
+
+
+def test_risk_corr_window_loaded():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.corr_window == 252
+
+
+def test_default_vol_model_is_garch_arch():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.vol_model == "garch_arch"
+
+
+def test_stats_config_loaded():
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.stats.bootstrap_mean_block == 21
+    assert cfg.stats.bootstrap_reps == 1000
+    assert cfg.stats.bootstrap_alpha == 0.05
+    assert cfg.stats.absmom_cash_threshold == 0.10
+    assert [tuple(p) for p in cfg.stats.subperiods] == [(2005, 2009), (2010, 2019), (2020, 9999)]
+
+
+def test_stats_subperiod_start_le_end():
+    from tests.fixtures.synthetic import make_cfg
+
+    with pytest.raises(ValidationError):
+        make_cfg(["SPY"], stats={"subperiods": [[2020, 2010]]})  # start > end

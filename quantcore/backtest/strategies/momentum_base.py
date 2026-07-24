@@ -9,10 +9,9 @@ from abc import abstractmethod
 
 from quantcore.backtest.accounting import CASH
 from quantcore.backtest.ptview import PointInTimeView
+from quantcore.backtest.strategies.momentum_selection import momentum_select
 from quantcore.backtest.strategy import Decision, DecisionEvent, Diagnostics, Strategy
-from quantcore.portfolio.selection import eligible_assets, select_top_k
 from quantcore.portfolio.weighting import route_absmom_to_cash
-from quantcore.signals.momentum import absolute_momentum, cross_sectional_momentum
 
 
 class MomentumStrategy(Strategy):
@@ -26,18 +25,12 @@ class MomentumStrategy(Strategy):
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
         if event is not DecisionEvent.SELECTION:
             return None
-        cfg = self._cfg
-        elig = eligible_assets(view.prices, cfg.universe.menu, cfg.universe.min_history_days)
-        scores = cross_sectional_momentum(
-            view.prices, cfg.signal.momentum_lookback, cfg.signal.momentum_skip
-        )
-        scores = {t: v for t, v in scores.items() if t in elig}
-        if not scores:
+        sel = momentum_select(view, self._cfg)
+        if sel is None:
             return None
-        selected = select_top_k(scores, cfg.signal.top_k)
+        elig, scores, selected, absmom = sel.eligible, sel.scores, sel.selected, sel.absmom
         w_risky, sigma_hat = self._risky_weights(selected, view)
-        absmom_all = absolute_momentum(view.prices, view.rates, cfg.signal.momentum_lookback)
-        absmom = {t: bool(absmom_all.get(t, False)) for t in selected}
+        garch_params, fell_back = self._vol_diagnostics(selected)
         weights, cash = route_absmom_to_cash(w_risky, absmom)
         target = {**weights, CASH: cash}
         return Decision(
@@ -49,6 +42,8 @@ class MomentumStrategy(Strategy):
                 absmom=absmom,
                 sigma_hat=sigma_hat,
                 w_risky=w_risky,
+                vol_fell_back=fell_back,
+                garch_params=garch_params,
             ),
         )
 
@@ -57,3 +52,9 @@ class MomentumStrategy(Strategy):
         self, selected: list[str], view: PointInTimeView
     ) -> tuple[dict[str, float], dict[str, float] | None]:
         """回傳 (相對權重 Σ=1, σ̂ 或 None)。"""
+
+    def _vol_diagnostics(
+        self, selected: list[str]
+    ) -> tuple[dict[str, dict[str, float] | None] | None, dict[str, bool] | None]:
+        """(garch_params, fell_back)；預設 None（無 GARCH，如 mom_only）。子類可覆寫。"""
+        return None, None

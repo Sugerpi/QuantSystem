@@ -23,7 +23,8 @@ def _cfg_and_snap():
         ["WIN", "MID", "LOSE", "SPY", "IEF"],
         signal={"momentum_lookback": 4, "momentum_skip": 1, "top_k": 2},
         universe={"min_history_days": 5},
-        risk={"vol_model": "rolling_std", "vol_window": 3},
+        # mom_ivol 已遷移到 VolForecaster（GARCH/EWMA），不再支援 rolling_std（§6.3）
+        risk={"vol_model": "ewma", "vol_window": 3},
         schedule={"selection_interval": 3, "exposure_check_interval": 2},
         backtest={"start": dates[0].date().isoformat(), "initial_nav": 1.0},
     )
@@ -132,3 +133,66 @@ def test_ablation_skips_invalid_cell_keeps_valid(tmp_path):
     assert "signal.top_k=999" not in labels  # 無效格被略過而非炸掉整批
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert any(f["cell_label"] == "signal.top_k=999" for f in manifest["failed_cells"])
+
+
+def _bootstrap_cfg_and_snap():
+    import numpy as np
+
+    from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
+
+    n = 340
+    dates = make_dates(n)
+    rng = np.random.default_rng(4)
+    # voltarget_only 內部硬編碼持有 "SPY"（與 universe.menu 無關），
+    # 快照須含 SPY 價格序列才能跑通，即便選單本身是 A/B/C/D。
+    prices = {
+        tk: list(100 * np.cumprod(1 + rng.normal(0.0003 * (i + 1), 0.01, n)))
+        for i, tk in enumerate(["A", "B", "C", "D", "SPY"])
+    }
+    snap = make_snapshot(prices, dates)
+    cfg = make_cfg(
+        ["A", "B", "C", "D"],
+        risk={"vol_model": "ewma", "corr_window": 60, "garch_window": 100},
+        signal={"top_k": 2, "momentum_lookback": 120, "momentum_skip": 5},
+        universe={"min_history_days": 130},
+        stats={"bootstrap_reps": 50},
+    )
+    return cfg, snap
+
+
+def test_ablation_writes_bootstrap_table_when_full_present(tmp_path):
+    import pandas as pd
+
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
+    run_dir = run_ablation(cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path, "test")
+    bt = pd.read_parquet(run_dir / "bootstrap.parquet")
+    assert set(bt["vs"]) == {"mom_ivol", "voltarget_only"}
+    assert set(bt["metric"]) == {"sharpe", "calmar"}
+    assert {"point", "lo", "hi", "excludes_zero"} <= set(bt.columns)
+
+
+def test_ablation_bootstrap_is_deterministic(tmp_path):
+    import pandas as pd
+
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
+    run_dir_1 = run_ablation(
+        cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path / "run1", "test"
+    )
+    run_dir_2 = run_ablation(
+        cfg, snap, ["full", "mom_ivol", "voltarget_only"], {}, tmp_path / "run2", "test"
+    )
+    bt1 = pd.read_parquet(run_dir_1 / "bootstrap.parquet")
+    bt2 = pd.read_parquet(run_dir_2 / "bootstrap.parquet")
+    pd.testing.assert_frame_equal(bt1, bt2)
+
+
+def test_ablation_skips_bootstrap_table_when_full_absent(tmp_path):
+    from quantcore.experiments.ablation import run_ablation
+
+    cfg, snap = _bootstrap_cfg_and_snap()
+    run_dir = run_ablation(cfg, snap, ["mom_ivol", "voltarget_only"], {}, tmp_path, "test")
+    assert not (run_dir / "bootstrap.parquet").exists()

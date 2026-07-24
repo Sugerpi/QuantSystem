@@ -31,7 +31,8 @@ def test_mom_ivol_decisions_have_full_diagnostics(tmp_path):
         ["WIN", "MID", "LOSE", "SPY", "IEF"],
         signal={"momentum_lookback": 4, "momentum_skip": 1, "top_k": 2},
         universe={"min_history_days": 5},
-        risk={"vol_model": "rolling_std", "vol_window": 3},
+        # mom_ivol 已遷移到 VolForecaster（GARCH/EWMA），不再支援 rolling_std（§6.3）
+        risk={"vol_model": "ewma", "vol_window": 3},
         schedule={"selection_interval": 3, "exposure_check_interval": 2},
         backtest={"start": dates[0].date().isoformat(), "initial_nav": 1.0},
     )
@@ -61,3 +62,28 @@ def test_mom_ivol_decisions_have_full_diagnostics(tmp_path):
     # Phase 3 不得洩漏任何 Phase 4 曝險欄：全數列皆為缺值
     for col in _PHASE4_EXPOSURE:
         assert dec[col].isna().all()
+
+
+def test_diagnostics_row_includes_vol_fell_back_and_garch_params():
+    from quantcore.backtest.strategy import Diagnostics
+    from quantcore.experiments.runner import _diagnostics_row
+
+    diag = Diagnostics(
+        eligible=["A"],
+        selected=["A"],
+        vol_fell_back={"A": False},
+        garch_params={"A": {"omega": 0.1, "alpha": 0.08, "beta": 0.9, "nu": 7.0}},
+    )
+    row = _diagnostics_row(diag)
+    assert "vol_fell_back" in row and "garch_params" in row
+    assert json.loads(row["vol_fell_back"]) == {"A": False}
+    assert json.loads(row["garch_params"])["A"]["beta"] == 0.9
+
+
+def test_diagnostics_row_vol_fields_none_when_absent():
+    from quantcore.backtest.strategy import Diagnostics
+    from quantcore.experiments.runner import _diagnostics_row
+
+    row = _diagnostics_row(Diagnostics(eligible=[], selected=[]))
+    assert row["vol_fell_back"] is None
+    assert row["garch_params"] is None

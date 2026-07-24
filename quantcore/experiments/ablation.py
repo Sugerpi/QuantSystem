@@ -14,12 +14,19 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pydantic import ValidationError
 
 from quantcore.backtest.clock import EventClock
 from quantcore.backtest.engine import run_strategy
-from quantcore.backtest.metrics import compute_metrics
+from quantcore.backtest.metrics import (
+    compute_metrics,
+    metric_calmar,
+    metric_sharpe,
+    paired_metric_diff_ci,
+    stationary_bootstrap_indices,
+)
 from quantcore.backtest.strategies import STRATEGIES
 from quantcore.config import QuantConfig, load_config
 from quantcore.data.hashing import config_hash
@@ -49,12 +56,13 @@ def _build_cells(base_raw: dict, param_grid: dict[str, list]) -> list[tuple[str,
     return cells
 
 
-def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict[str, dict]:
-    """跑指定策略，回傳 {strategy_id: metrics dict}。in-memory，不落 run 目錄。"""
+def _build_clock(
+    cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> tuple[EventClock, list]:
+    """建各策略共用的單一 EventClock（warmup = 全策略最大），並回實例化的策略清單。"""
     d = snapshot["prices"]["date"]
     days = pd.DatetimeIndex(sorted(d.unique()))
     days = days[days >= pd.Timestamp(cfg.backtest.start)]
-
     strategies = [STRATEGIES[sid](cfg) for sid in strategy_ids]
     warmup = max(s.warmup_days for s in strategies)
     clock = EventClock(
@@ -63,22 +71,78 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
         selection_interval=cfg.schedule.selection_interval,
         exposure_check_interval=cfg.schedule.exposure_check_interval,
     )
+    return clock, strategies
+
+
+def _daily_rate(snapshot: dict, dates: pd.Series) -> pd.Series:
+    """DTB3 年化% → 日利率，對齊 dates。"""
+    return (
+        snapshot["rates"].set_index("date")["DTB3"].reindex(dates).ffill().bfill()
+        / 100.0
+        / _DAYS_PER_YEAR
+    )
+
+
+def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict[str, dict]:
+    """跑指定策略，回傳 {strategy_id: metrics dict}。in-memory，不落 run 目錄。"""
+    clock, strategies = _build_clock(cfg, snapshot, strategy_ids)
 
     result: dict[str, dict] = {}
     for s in strategies:
         nav_df, _w, _dec = run_strategy(snapshot, clock, s, cfg)
-        rate = (
-            snapshot["rates"].set_index("date")["DTB3"].reindex(nav_df["date"]).ffill().bfill()
-            / 100.0
-            / _DAYS_PER_YEAR
-        )
+        rate = _daily_rate(snapshot, nav_df["date"])
         result[s.strategy_id] = compute_metrics(
             nav=nav_df["nav"].reset_index(drop=True),
             rate_daily=rate.reset_index(drop=True),
             total_turnover=float(nav_df["turnover"].sum()),
             total_cost=float(nav_df["cost"].sum()),
+            weights=_w,
         )
     return result
+
+
+def _baseline_returns(
+    base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """各策略在 baseline config 下的（日報酬, 日rf），同一 clock 對齊。"""
+    clock, strategies = _build_clock(base_cfg, snapshot, strategy_ids)
+    out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for s in strategies:
+        nav_df, _w, _dec = run_strategy(snapshot, clock, s, base_cfg)
+        rate = _daily_rate(snapshot, nav_df["date"])
+        # bootstrap 用 dropna 對齊（n-1 日）：與 comparison 表的 compute_metrics
+        # （fillna(0.0), n 日）建構略異，故 bootstrap 的 point 可能與表頭 sharpe
+        # 不完全相等——但配對差異與 excludes_zero 判定自洽、不受影響。
+        r = nav_df["nav"].pct_change().dropna().to_numpy()
+        rf = rate.to_numpy()[1:]  # 對齊 pct_change 去掉的首日
+        out[s.strategy_id] = (r, rf)
+    lengths = {len(r) for r, _ in out.values()}
+    if len(lengths) != 1:
+        raise ValueError(f"baseline 各策略報酬長度不一致：{lengths}（clock 對齊有誤）")
+    return out
+
+
+def _baseline_bootstrap(
+    base_cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> pd.DataFrame:
+    """full vs 每個其他策略的 Sharpe/Calmar 配對差異 CI（§6.3）。full 不在則回空表。"""
+    if "full" not in strategy_ids:
+        return pd.DataFrame()
+    series = _baseline_returns(base_cfg, snapshot, strategy_ids)
+    ra, rf = series["full"]
+    n = len(ra)
+    rng = np.random.default_rng(base_cfg.seed)  # INV-6
+    idx = stationary_bootstrap_indices(
+        n, base_cfg.stats.bootstrap_mean_block, base_cfg.stats.bootstrap_reps, rng
+    )
+    rows = []
+    for sid, (rb, _rf) in series.items():
+        if sid == "full":
+            continue
+        for mname, mfn in (("sharpe", metric_sharpe), ("calmar", metric_calmar)):
+            res = paired_metric_diff_ci(ra, rb, rf, mfn, idx, base_cfg.stats.bootstrap_alpha)
+            rows.append({"vs": sid, "metric": mname, **res})
+    return pd.DataFrame(rows)
 
 
 def _write_manifest(
@@ -141,6 +205,11 @@ def run_ablation(
     run_dir = create_run_dir(out_root, f"{label}_ablation", now)
     table.to_parquet(run_dir / "comparison.parquet", index=False)
     _write_manifest(run_dir, base_cfg, snapshot, strategy_ids, param_grid, failed_cells)
+
+    bootstrap = _baseline_bootstrap(base_cfg, snapshot, strategy_ids)
+    if not bootstrap.empty:
+        bootstrap.to_parquet(run_dir / "bootstrap.parquet", index=False)
+
     _print_summary(table)
     return run_dir
 
