@@ -89,6 +89,61 @@ def stationary_bootstrap_indices(
     return idx
 
 
+def _nav_from_returns(r: np.ndarray) -> pd.Series:
+    """由日報酬重建 NAV（起始 1.0）。供 Calmar/MaxDD 的 bootstrap 一致計算。"""
+    return pd.Series(np.concatenate([[1.0], np.cumprod(1.0 + np.asarray(r, dtype="float64"))]))
+
+
+def metric_sharpe(r: np.ndarray, rf: np.ndarray) -> float:
+    """報酬陣列版 Sharpe（供 bootstrap）。"""
+    return sharpe(pd.Series(r), pd.Series(rf))
+
+
+def metric_calmar(r: np.ndarray, rf: np.ndarray) -> float:
+    """報酬陣列版 Calmar（供 bootstrap；rf 未用）。"""
+    return calmar(_nav_from_returns(r))
+
+
+def bootstrap_metric_ci(
+    returns: np.ndarray,
+    rf: np.ndarray,
+    metric_fn,
+    indices: np.ndarray,
+    alpha: float = 0.05,
+) -> tuple[float, float, float]:
+    """單一策略指標的百分位 CI。回 (point, lo, hi)。非有限重抽值剔除。"""
+    r = np.asarray(returns, dtype="float64")
+    f = np.asarray(rf, dtype="float64")
+    stats = np.array([metric_fn(r[ix], f[ix]) for ix in indices])
+    stats = stats[np.isfinite(stats)]
+    lo = float(np.percentile(stats, 100 * alpha / 2))
+    hi = float(np.percentile(stats, 100 * (1 - alpha / 2)))
+    return float(metric_fn(r, f)), lo, hi
+
+
+def paired_metric_diff_ci(
+    returns_a: np.ndarray,
+    returns_b: np.ndarray,
+    rf: np.ndarray,
+    metric_fn,
+    indices: np.ndarray,
+    alpha: float = 0.05,
+) -> dict[str, float | bool]:
+    """配對差異 CI：對兩序列抽**同一組**索引，逐次算 metric(a)−metric(b)（§6.3）。
+
+    回 {point, lo, hi, excludes_zero}。CI 不含 0 才算「優勢站得住」。
+    """
+    a = np.asarray(returns_a, dtype="float64")
+    b = np.asarray(returns_b, dtype="float64")
+    f = np.asarray(rf, dtype="float64")
+    diffs = np.array([metric_fn(a[ix], f[ix]) - metric_fn(b[ix], f[ix]) for ix in indices])
+    diffs = diffs[np.isfinite(diffs)]
+    lo = float(np.percentile(diffs, 100 * alpha / 2))
+    hi = float(np.percentile(diffs, 100 * (1 - alpha / 2)))
+    point = float(metric_fn(a, f) - metric_fn(b, f))
+    return {"point": point, "lo": lo, "hi": hi, "excludes_zero": lo > 0 or hi < 0}
+
+
 def compute_metrics(
     nav: pd.Series, rate_daily: pd.Series, total_turnover: float, total_cost: float
 ) -> dict[str, float]:

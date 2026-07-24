@@ -4,7 +4,64 @@ from __future__ import annotations
 
 import numpy as np
 
-from quantcore.backtest.metrics import stationary_bootstrap_indices
+from quantcore.backtest.metrics import (
+    bootstrap_metric_ci,
+    metric_calmar,
+    metric_sharpe,
+    paired_metric_diff_ci,
+    stationary_bootstrap_indices,
+)
+
+
+def _rf(n):
+    return np.full(n, 0.0001)
+
+
+def test_metric_adapters_finite():
+    rng = np.random.default_rng(0)
+    r = rng.normal(0.0005, 0.01, 500)
+    assert np.isfinite(metric_sharpe(r, _rf(500)))
+    assert np.isfinite(metric_calmar(r, _rf(500)))
+
+
+def test_ci_brackets_point_for_noisy_series():
+    rng = np.random.default_rng(3)
+    r = rng.normal(0.0005, 0.01, 500)
+    idx = stationary_bootstrap_indices(500, 21, 500, np.random.default_rng(9))
+    point, lo, hi = bootstrap_metric_ci(r, _rf(500), metric_sharpe, idx)
+    assert lo <= point <= hi
+    assert lo < hi
+
+
+def test_paired_diff_identical_series_ci_contains_zero():
+    rng = np.random.default_rng(5)
+    r = rng.normal(0.0005, 0.01, 500)
+    idx = stationary_bootstrap_indices(500, 21, 500, np.random.default_rng(11))
+    res = paired_metric_diff_ci(r, r.copy(), _rf(500), metric_sharpe, idx)
+    # 配對性守護：相同序列 → 逐次差異恆為 0（若誤用獨立抽樣，差異會有雜訊、CI 不退化）
+    assert res["point"] == 0.0
+    assert res["lo"] == 0.0 and res["hi"] == 0.0
+    assert res["excludes_zero"] is False
+
+
+def test_paired_diff_shifted_series_excludes_zero():
+    rng = np.random.default_rng(6)
+    ra = rng.normal(0.001, 0.01, 800)
+    rb = ra - 0.0008
+    idx = stationary_bootstrap_indices(800, 21, 800, np.random.default_rng(13))
+    res = paired_metric_diff_ci(ra, rb, _rf(800), metric_sharpe, idx)
+    assert res["point"] > 0
+    assert res["excludes_zero"] is True
+
+
+def test_bootstrap_ci_deterministic():
+    rng = np.random.default_rng(2)
+    r = rng.normal(0.0005, 0.01, 300)
+    i1 = stationary_bootstrap_indices(300, 21, 300, np.random.default_rng(1))
+    i2 = stationary_bootstrap_indices(300, 21, 300, np.random.default_rng(1))
+    assert bootstrap_metric_ci(r, _rf(300), metric_sharpe, i1) == bootstrap_metric_ci(
+        r, _rf(300), metric_sharpe, i2
+    )
 
 
 def test_indices_shape_and_bounds():
