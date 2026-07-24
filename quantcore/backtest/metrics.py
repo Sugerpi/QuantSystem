@@ -67,6 +67,28 @@ def annualized_turnover(total_turnover: float, n_days: int) -> float:
     return float(total_turnover * _DAYS_PER_YEAR / n_days)
 
 
+def stationary_bootstrap_indices(
+    n: int, mean_block: int, n_reps: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Politis-Romano stationary bootstrap 索引矩陣 (n_reps, n)。
+
+    每步以機率 1/mean_block 跳到新隨機起點，否則沿用前一索引 +1（circular wrap）。
+    日報酬有自相關，iid 重抽的 CI 系統性偏窄（§6.4），故用 stationary bootstrap。
+    RNG 由呼叫端以 cfg.seed 建立（INV-6）。
+    """
+    if n < 1 or mean_block < 1 or n_reps < 1:
+        raise ValueError("n/mean_block/n_reps 皆須 ≥ 1")
+    p = 1.0 / mean_block
+    idx = np.empty((n_reps, n), dtype=np.int64)
+    for r in range(n_reps):
+        i = int(rng.integers(0, n))
+        idx[r, 0] = i
+        for t in range(1, n):
+            i = int(rng.integers(0, n)) if rng.random() < p else (i + 1) % n
+            idx[r, t] = i
+    return idx
+
+
 def compute_metrics(
     nav: pd.Series, rate_daily: pd.Series, total_turnover: float, total_cost: float
 ) -> dict[str, float]:
