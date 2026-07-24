@@ -187,3 +187,29 @@ def compute_metrics(
         "n_days": n,
         "average_exposure": average_exposure(weights) if weights is not None else None,
     }
+
+
+def subperiod_metrics(
+    nav: pd.Series,
+    rate_daily: pd.Series,
+    subperiods: list[tuple[int, int]],
+) -> dict[str, dict[str, float]]:
+    """對每個 (start_year, end_year) 子期間跑 compute_metrics（§6.4）。
+
+    nav/rate_daily 須以 DatetimeIndex 索引。回 {"start-end": metrics}。
+    動量策略績效高度 regime 依賴，單一全期數字會說謊，故切子期間分別量。
+    """
+    years = nav.index.year
+    out: dict[str, dict[str, float]] = {}
+    for start, end in subperiods:
+        mask = (years >= start) & (years <= end)
+        key = f"{start}-{end}"
+        if not mask.any():
+            out[key] = {"n_days": 0}
+            continue
+        sub_nav = nav[mask].reset_index(drop=True)
+        sub_rate = rate_daily[mask].reset_index(drop=True)
+        out[key] = compute_metrics(
+            sub_nav, sub_rate, total_turnover=float("nan"), total_cost=float("nan")
+        )
+    return out

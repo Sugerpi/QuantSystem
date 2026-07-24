@@ -15,6 +15,7 @@ from quantcore.backtest.metrics import (
     metric_sharpe,
     paired_metric_diff_ci,
     stationary_bootstrap_indices,
+    subperiod_metrics,
 )
 
 
@@ -144,3 +145,14 @@ def test_compute_metrics_average_exposure_from_weights():
     )
     m = compute_metrics(nav, rate, 0.0, 0.0, weights=w)
     assert m["average_exposure"] == pytest.approx(0.5)
+
+
+def test_subperiod_metrics_splits_by_year():
+    dates = pd.to_datetime(["2008-06-01", "2009-06-01", "2015-06-01", "2021-06-01", "2022-06-01"])
+    nav = pd.Series([1.0, 0.9, 1.2, 1.3, 1.4], index=dates)
+    rate = pd.Series([0.0001] * 5, index=dates)
+    out = subperiod_metrics(nav, rate, [(2005, 2009), (2010, 2019), (2020, 9999)])
+    assert set(out) == {"2005-2009", "2010-2019", "2020-9999"}
+    assert out["2005-2009"]["n_days"] == 2  # 2008,2009
+    assert out["2010-2019"]["n_days"] == 1  # 2015
+    assert out["2020-9999"]["n_days"] == 2  # 2021,2022
