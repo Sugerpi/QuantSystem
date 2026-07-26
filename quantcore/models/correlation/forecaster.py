@@ -45,9 +45,12 @@ class CorrelationForecaster:
                 self._params = DccParams(*self._fixed_ab, q_bar(std_resid, self._qbar_shrink))
             else:
                 self._params = estimate_dcc(std_resid, self._fixed_ab, self._qbar_shrink)
-        else:  # 沿用 (a,b)，Q̄ 隨（可能輪動的）資產集重算
+        else:  # 沿用 (a,b)，Q̄ 隨（可能輪動的）資產集重算；保留 fell_back（否則消融漏算 fallback）
             self._params = DccParams(
-                self._params.a, self._params.b, q_bar(std_resid, self._qbar_shrink)
+                self._params.a,
+                self._params.b,
+                q_bar(std_resid, self._qbar_shrink),
+                fell_back=self._params.fell_back,
             )
         return dcc_recursion(std_resid, self._params)
 

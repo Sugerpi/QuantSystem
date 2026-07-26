@@ -65,3 +65,34 @@ def test_selection_rebuilds_qbar_for_rotated_universe():
     assert fc.last_params().q_bar.shape == (2, 2)
     fc.refit(_resid(["A", "B", "C"], seed=2))  # 換入新資產
     assert fc.last_params().q_bar.shape == (3, 3)  # Q̄ 隨新集合重建
+
+
+def test_reestimate_cadence_and_fell_back_preserved(monkeypatch):
+    import quantcore.models.correlation.forecaster as fc_mod
+    from quantcore.models.correlation.dcc import DccParams
+
+    calls = {"n": 0}
+    real = fc_mod.estimate_dcc
+
+    def spy(std_resid, fixed_ab, shrink):
+        calls["n"] += 1
+        p = real(std_resid, fixed_ab, shrink)
+        # 回傳 fell_back=True，驗證 reuse 分支保留旗標（否則會被重置為 False）
+        return DccParams(p.a, p.b, p.q_bar, fell_back=True)
+
+    monkeypatch.setattr(fc_mod, "estimate_dcc", spy)
+    fc = _make("dcc", refit_interval=63)
+
+    fc.refit(_resid(["A", "B"], seed=1))  # 選擇 1：重估（call 1）
+    assert calls["n"] == 1
+    assert fc.last_params().fell_back is True
+
+    fc.refit(_resid(["A", "B"], seed=2))  # 選擇 2：沿用，不重估
+    assert calls["n"] == 1
+    assert fc.last_params().fell_back is True  # 保留旗標（Fix 1）
+
+    fc.refit(_resid(["A", "B"], seed=3))  # 選擇 3：沿用
+    assert calls["n"] == 1
+
+    fc.refit(_resid(["A", "B"], seed=4))  # 選擇 4：重估（call 2）
+    assert calls["n"] == 2
