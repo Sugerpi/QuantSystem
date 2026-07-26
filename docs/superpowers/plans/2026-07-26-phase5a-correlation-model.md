@@ -24,6 +24,13 @@
    - **Task 8**：config 加 `risk.dcc_qbar_shrink: 0.10`；schema `dcc_qbar_shrink: float = Field(ge=0, lt=1)`。default.yaml 一併加。
    - **Task 9**：`vol_target_base` 建 `CorrelationForecaster` 時傳 `cfg.risk.dcc_qbar_shrink`。
 
+4. **延後到 Task 11 前的 profiling pass 的效能項**（review 指出，皆非正確性、先量再優化）：
+   - `_dcc_negloglik` 內迴圈每步跑 eigh-based `normalize_to_correlation`，但 Q_t 本就 PD——可換便宜的對角 rescale（`R=Q/outer(√diagQ,√diagQ)`），公開 API 仍用 normalize。
+   - `VolForecaster.filter` 的 GARCH 分支每次呼叫 `garch_filter_forecast` 與 `garch_filter_residuals` 各建一次 arch+`fix()`（同窗同參數，2×）。可合成單一 `fix()` 同時回 (variance_path, std_resid)。filter 每 5 交易日/每持有檔跑一次，ablation 重跑多次會放大。
+   - profiling 若顯示這兩處佔比小則不動（避免臆測性優化）。
+
+5. **Task 9 review checkpoint（殘差新鮮度契約）**：`last_standardized_residuals` 讀快取、無新鮮度守護。Task 9 的 `_collect_std_residuals` 組完 date×ticker 矩陣後須**斷言矩陣最後一列日期＝決策當日**（view 的 as-of），把「漏對某 selected 檔 refit/filter → 吃到前一次 selection 的 stale 殘差」變成誠實失敗（INV-3 只驗 Σ 代數性質、驗不到輸入新鮮度）。
+
 ---
 
 ## File Structure
