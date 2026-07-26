@@ -194,3 +194,59 @@ def test_stats_subperiod_start_le_end():
 
     with pytest.raises(ValidationError):
         make_cfg(["SPY"], stats={"subperiods": [[2020, 2010]]})  # start > end
+
+
+def test_default_corr_model_is_ewma():
+    from quantcore.config import load_config
+
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.risk.corr_model == "ewma"  # DCC 未證明前用基線（§5.3 紀律）
+    assert cfg.risk.dcc_refit_interval == 63
+    assert tuple(cfg.risk.dcc_fixed_ab) == (0.01, 0.96)
+    assert cfg.risk.dcc_qbar_shrink == 0.10
+
+
+def test_dcc_fixed_ab_rejects_nonstationary():
+    import pytest
+    from pydantic import ValidationError
+
+    from quantcore.config.schema import RiskConfig
+
+    base = dict(
+        vol_model="garch_arch",
+        corr_model="dcc",
+        vol_target_annual=0.1,
+        exposure_band=0.1,
+        exposure_min=0.1,
+        vol_window=63,
+        ewma_lambda=0.94,
+        forecast_horizon=21,
+        garch_window=1000,
+        corr_window=252,
+        dcc_refit_interval=63,
+        dcc_fixed_ab=(0.5, 0.6),
+        dcc_qbar_shrink=0.10,  # a+b=1.1 ≥ 1
+    )
+    with pytest.raises(ValidationError):
+        RiskConfig(**base)
+
+
+def test_dcc_refit_interval_zero_is_fixed_mode():
+    from quantcore.config.schema import RiskConfig
+
+    cfg = RiskConfig(
+        vol_model="garch_arch",
+        corr_model="dcc",
+        vol_target_annual=0.1,
+        exposure_band=0.1,
+        exposure_min=0.1,
+        vol_window=63,
+        ewma_lambda=0.94,
+        forecast_horizon=21,
+        garch_window=1000,
+        corr_window=252,
+        dcc_refit_interval=0,
+        dcc_fixed_ab=(0.01, 0.96),
+        dcc_qbar_shrink=0.10,
+    )
+    assert cfg.dcc_refit_interval == 0  # 合法：固定模式
