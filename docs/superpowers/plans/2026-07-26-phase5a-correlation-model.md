@@ -12,6 +12,20 @@
 
 ---
 
+## 執行中修訂（post-Task-3 review amendments）
+
+1. **Task 1 hardening**（已於 commit `e518f2c` 完成）：`normalize_to_correlation` 對零變異數對角線塌陷改為**拋 ValueError**（不再靜默 `d==0→1` 產出 R_ii=0）。理由：新的 EWMA/DCC 走 `np.cov`，常數欄給 0 逃過 `build_covariance` 的 finiteness 檢查 → 靜默腐蝕下游變異數（相對舊 rolling 路徑經 `np.corrcoef`→NaN→拋錯 為安全退步）。誠實失敗，比照 `portfolio_vol`/`inverse_vol`。
+
+2. **`DccParams` `eq=False`**（已於 commit `14a79bb` 完成）：frozen dataclass 含 ndarray 欄位，預設 `__eq__/__hash__` 會拋錯；作值載體、以身分比較即可。
+
+3. **Q̄ shrinkage 進 config（`_QBAR_SHRINK` 移除，改顯式 `shrink` 參數串接）**（Task 3 已改 `q_bar(std_resid, shrink)`，commit `14a79bb`）。CLAUDE.md 硬規則：影響相關估計的建模超參數（設計文件明言可消融）不得在 config 外。以下 task 據此調整：
+   - **Task 4**：`estimate_dcc(std_resid, fixed_ab, shrink)`；內部 `q_bar(std_resid, shrink)`；退化 fallback 分支 Q̄=I 不需 shrink。測試以 `shrink=0.10` 呼叫。
+   - **Task 7**：`CorrelationForecaster.__init__(..., qbar_shrink)`；`refit` 內 `estimate_dcc(std_resid, self._fixed_ab, self._qbar_shrink)` 與沿用分支 `q_bar(std_resid, self._qbar_shrink)`。測試以 `qbar_shrink=0.10` 建構。
+   - **Task 8**：config 加 `risk.dcc_qbar_shrink: 0.10`；schema `dcc_qbar_shrink: float = Field(ge=0, lt=1)`。default.yaml 一併加。
+   - **Task 9**：`vol_target_base` 建 `CorrelationForecaster` 時傳 `cfg.risk.dcc_qbar_shrink`。
+
+---
+
 ## File Structure
 
 **新建：**
