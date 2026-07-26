@@ -81,17 +81,24 @@ def test_ewma_correlation_raises_on_zero_variance_asset():
 
 def test_q_bar_shrinks_toward_identity():
     E = _resid_frame()
-    Q = q_bar(E)
+    Q = q_bar(E, shrink=0.10)
     assert np.allclose(Q, Q.T)
     assert np.min(np.linalg.eigvalsh(Q)) > 0  # shrink 後正定
     # 對角線 ≈ 1（相關矩陣 shrink 到單位對角仍為 1）
     assert np.allclose(np.diag(Q), 1.0, atol=1e-10)
 
 
+def test_q_bar_rejects_shrink_at_one():
+    # shrink=1 會抹除全部相關資訊，屬非法輸入，須誠實拋錯
+    E = _resid_frame()
+    with pytest.raises(ValueError):
+        q_bar(E, shrink=1.0)
+
+
 def test_dcc_recursion_first_step_matches_hand():
     idx = pd.date_range("2020-01-01", periods=3, freq="B")
     E = pd.DataFrame([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], index=idx, columns=["A", "B"])
-    Qbar = q_bar(E)
+    Qbar = q_bar(E, shrink=0.10)
     a, b = 0.05, 0.90
     Q = Qbar.copy()
     arr = E.to_numpy()
@@ -104,7 +111,9 @@ def test_dcc_recursion_first_step_matches_hand():
 
 
 def test_dcc_recursion_returns_valid_labeled_correlation():
-    R = dcc_recursion(_resid_frame(), DccParams(a=0.05, b=0.9, q_bar=q_bar(_resid_frame())))
+    R = dcc_recursion(
+        _resid_frame(), DccParams(a=0.05, b=0.9, q_bar=q_bar(_resid_frame(), shrink=0.10))
+    )
     assert list(R.columns) == ["A", "B", "C"]
     assert np.allclose(np.diag(R.to_numpy()), 1.0)
     assert np.min(np.linalg.eigvalsh(R.to_numpy())) >= -1e-10
