@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from quantcore.models.volatility.forecaster import VolForecaster
@@ -10,6 +12,12 @@ from tests.fixtures.synthetic import make_garch_t_returns
 
 def _returns(n=1500, seed=5):
     return make_garch_t_returns(n, omega=1e-6, alpha=0.08, beta=0.90, nu=8, seed=seed)
+
+
+def _garch_like_series(n=400, seed=1):
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2018-01-01", periods=n, freq="B")
+    return pd.Series(rng.standard_normal(n) * 0.01, index=idx)
 
 
 def test_unsupported_spec_rejected_eagerly():
@@ -99,3 +107,24 @@ def test_last_params_none_for_ewma_spec():
     f = VolForecaster("ewma", ewma_lambda=0.94, horizon=21, garch_window=1000)
     f.refit("AAA", _returns())
     assert f.last_params("AAA") is None
+
+
+def test_refit_caches_standardized_residuals_with_index():
+    fc = VolForecaster("garch_arch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    r = _garch_like_series()
+    fc.refit("SPY", r)
+    resid = fc.last_standardized_residuals("SPY")
+    assert isinstance(resid, pd.Series)
+    assert isinstance(resid.index, pd.DatetimeIndex)
+    assert np.isfinite(resid.to_numpy()).all()
+    assert 0.3 < resid.std() < 3.0  # 標準化殘差量級 ~O(1)
+
+
+def test_filter_updates_standardized_residuals_cache():
+    fc = VolForecaster("garch_arch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    r = _garch_like_series()
+    fc.refit("SPY", r)
+    r2 = pd.concat([r, _garch_like_series(5, seed=2).tail(5)])
+    fc.filter("SPY", r2)
+    resid = fc.last_standardized_residuals("SPY")
+    assert resid.index[-1] == r2.index[-1]  # filter 後殘差含最新日

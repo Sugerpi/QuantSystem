@@ -114,3 +114,15 @@ def test_garch_filter_forecast_rejects_bad_horizon():
     params = GarchArch().fit(r).arch_params
     with pytest.raises(ValueError):
         garch_filter_forecast(params, r, 0)
+
+
+def test_garch_filter_residuals_matches_scale():
+    from quantcore.models.volatility.garch_arch import GarchArch, garch_filter_residuals
+
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2018-01-01", periods=300, freq="B")
+    r = pd.Series(rng.standard_normal(300) * 0.01, index=idx)
+    m = GarchArch().fit(r)
+    resid = garch_filter_residuals(m.arch_params, r)
+    # 同參數同資料 → 與 fit 的 standardized_residuals 一致
+    assert np.allclose(resid.to_numpy(), m.standardized_residuals.to_numpy(), atol=1e-8)
