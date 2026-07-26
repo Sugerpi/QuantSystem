@@ -124,6 +124,7 @@ def test_estimate_dcc_returns_valid_params():
     assert params.a >= 0 and params.b >= 0
     assert params.a + params.b < 1.0
     assert params.q_bar.shape == (3, 3)
+    assert params.fell_back is False
 
 
 def test_estimate_dcc_degenerate_falls_back_to_fixed():
@@ -132,3 +133,29 @@ def test_estimate_dcc_degenerate_falls_back_to_fixed():
     E = pd.DataFrame([[np.nan, np.nan], [1.0, 1.0]], index=idx, columns=["A", "B"])
     params = estimate_dcc(E, fixed_ab=(0.01, 0.96), shrink=0.10)
     assert (params.a, params.b) == (0.01, 0.96)
+    assert params.fell_back is True
+
+
+def test_estimate_dcc_zero_variance_column_raises():
+    # 零變異數欄 → q_bar 的 np.corrcoef 給 NaN → 誠實拋錯（不再靜默退回 fixed）
+    idx = pd.date_range("2020-01-01", periods=50, freq="B")
+    rng = np.random.default_rng(2)
+    data = rng.standard_normal((50, 2))
+    data[:, 1] = 0.0  # B 全 0（零變異數）
+    E = pd.DataFrame(data, index=idx, columns=["A", "B"])
+    with pytest.raises(ValueError):
+        estimate_dcc(E, fixed_ab=(0.01, 0.96), shrink=0.10)
+
+
+def test_estimate_dcc_nonconvergence_falls_back(monkeypatch):
+    import quantcore.models.correlation.dcc as dcc_mod
+
+    class _FailRes:
+        success = False
+        x = np.array([np.nan, np.nan])
+
+    monkeypatch.setattr(dcc_mod, "minimize", lambda *a, **k: _FailRes())
+    params = estimate_dcc(_resid_frame(), fixed_ab=(0.01, 0.96), shrink=0.10)
+    assert (params.a, params.b) == (0.01, 0.96)
+    assert params.fell_back is True
+    assert params.q_bar.shape == (3, 3)  # 非退化樣本 → Q̄ 為估得的（非 I）

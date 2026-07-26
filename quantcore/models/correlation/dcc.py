@@ -26,7 +26,9 @@ class DccParams:
 
     a: float
     b: float
-    q_bar: np.ndarray  # 標準化殘差的（shrink 後）樣本相關
+    q_bar: np.ndarray  # 標準化殘差的（shrink 後）樣本相關（呼叫端勿就地改）
+    # 重估失敗/退化而回退 fixed_ab 時 True（供消融觀測，比照 4a FitOutcome.fell_back）
+    fell_back: bool = False
 
 
 def _resid_matrix(std_resid: pd.DataFrame) -> tuple[list[str], np.ndarray]:
@@ -85,14 +87,17 @@ def _dcc_negloglik(theta: np.ndarray, E: np.ndarray, Qbar: np.ndarray) -> float:
 def estimate_dcc(
     std_resid: pd.DataFrame, fixed_ab: tuple[float, float], shrink: float
 ) -> DccParams:
-    """QMLE 估 (a,b)；不收斂 / a+b≥1 / 非有限 → 退回 fixed_ab（誠實 fallback，比照 4a）。"""
+    """QMLE 估 (a,b)；不收斂 / a+b≥1 / 非有限 → 退回 fixed_ab（誠實 fallback + fell_back 標記，
+    比照 4a）。
+
+    僅「觀測不足（<2）」退化為 fixed（Q̄=I）；零變異數殘差與 shrink 非法由 q_bar 誠實拋錯（不吞）。
+    """
     try:
         _, E = _resid_matrix(std_resid)
-        Qbar = q_bar(std_resid, shrink)
     except ValueError:
-        # 樣本不足以估 Q̄：用 fixed_ab + 退化 Q̄=I（維度取自欄數）
         k = len(std_resid.columns)
-        return DccParams(*fixed_ab, np.eye(k))
+        return DccParams(*fixed_ab, np.eye(k), fell_back=True)
+    Qbar = q_bar(std_resid, shrink)  # 零變異數/shrink 非法 → 拋錯，不吞
     res = minimize(
         _dcc_negloglik,
         x0=np.array([_A_START, _B_START], dtype="float64"),
@@ -105,5 +110,5 @@ def estimate_dcc(
     a, b = float(res.x[0]), float(res.x[1])
     ok = bool(res.success) and np.isfinite([a, b]).all() and a >= 0 and b >= 0 and a + b < 1.0
     if not ok:
-        return DccParams(*fixed_ab, Qbar)
-    return DccParams(a=a, b=b, q_bar=Qbar)
+        return DccParams(*fixed_ab, Qbar, fell_back=True)
+    return DccParams(a=a, b=b, q_bar=Qbar, fell_back=False)
