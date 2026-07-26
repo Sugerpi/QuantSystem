@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from quantcore.models.correlation.base import normalize_to_correlation
 from quantcore.models.correlation.ewma_corr import ewma_correlation
@@ -57,3 +58,21 @@ def test_ewma_first_step_matches_hand_recursion():
     expected = normalize_to_correlation(S)
     got = ewma_correlation(E, lam=lam).to_numpy()
     assert np.allclose(got, expected, atol=1e-12)
+
+
+def test_normalize_raises_on_degenerate_zero_variance_diagonal():
+    # 零變異數資產（整列/欄為 0）→ 對角線塌陷，須誠實拋錯而非靜默產出 R_ii=0
+    M = np.array([[1.0, 0.0], [0.0, 0.0]])  # 第二資產變異數為 0
+    with pytest.raises(ValueError):
+        normalize_to_correlation(M)
+
+
+def test_ewma_correlation_raises_on_zero_variance_asset():
+    # 常數（零）標準化殘差欄 → EWMA 相關應誠實拋錯（不靜默腐蝕下游變異數）
+    idx = pd.date_range("2020-01-01", periods=50, freq="B")
+    rng = np.random.default_rng(1)
+    data = rng.standard_normal((50, 2))
+    data[:, 1] = 0.0  # B 資產全 0
+    E = pd.DataFrame(data, index=idx, columns=["A", "B"])
+    with pytest.raises(ValueError):
+        ewma_correlation(E, lam=0.94)
