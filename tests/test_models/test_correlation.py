@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from quantcore.models.correlation.base import normalize_to_correlation
-from quantcore.models.correlation.dcc import DccParams, dcc_recursion, q_bar
+from quantcore.models.correlation.dcc import DccParams, dcc_recursion, estimate_dcc, q_bar
 from quantcore.models.correlation.ewma_corr import ewma_correlation
 
 
@@ -117,3 +117,18 @@ def test_dcc_recursion_returns_valid_labeled_correlation():
     assert list(R.columns) == ["A", "B", "C"]
     assert np.allclose(np.diag(R.to_numpy()), 1.0)
     assert np.min(np.linalg.eigvalsh(R.to_numpy())) >= -1e-10
+
+
+def test_estimate_dcc_returns_valid_params():
+    params = estimate_dcc(_resid_frame(), fixed_ab=(0.01, 0.96), shrink=0.10)
+    assert params.a >= 0 and params.b >= 0
+    assert params.a + params.b < 1.0
+    assert params.q_bar.shape == (3, 3)
+
+
+def test_estimate_dcc_degenerate_falls_back_to_fixed():
+    # dropna 後 < 2 筆有效觀測 → 誠實退回 fixed_ab（不拋錯中斷）
+    idx = pd.date_range("2020-01-01", periods=2, freq="B")
+    E = pd.DataFrame([[np.nan, np.nan], [1.0, 1.0]], index=idx, columns=["A", "B"])
+    params = estimate_dcc(E, fixed_ab=(0.01, 0.96), shrink=0.10)
+    assert (params.a, params.b) == (0.01, 0.96)

@@ -10,8 +10,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 
 from quantcore.models.correlation.base import normalize_to_correlation
+
+_A_START, _B_START = 0.02, 0.95  # QMLE 固定起點（決定性，不吃亂數，INV-6）
+_AB_UPPER = 0.999  # a+b 上界（保平穩）
 
 
 @dataclass(frozen=True, eq=False)
@@ -55,3 +59,51 @@ def dcc_recursion(std_resid: pd.DataFrame, params: DccParams) -> pd.DataFrame:
         Q = (1 - a - b) * Qbar + a * (e @ e.T) + b * Q
     R = normalize_to_correlation(Q)
     return pd.DataFrame(R, index=cols, columns=cols)
+
+
+def _dcc_negloglik(theta: np.ndarray, E: np.ndarray, Qbar: np.ndarray) -> float:
+    """DCC 準似然（僅相關部分）：Σ_t [log|R_t| + ε_t' R_t^{-1} ε_t]。"""
+    a, b = float(theta[0]), float(theta[1])
+    if a < 0 or b < 0 or a + b >= _AB_UPPER:
+        return 1e12  # 不可行區重罰
+    Q = Qbar.copy()
+    total = 0.0
+    for t in range(len(E)):
+        if t > 0:
+            e_prev = E[t - 1][:, None]
+            Q = (1 - a - b) * Qbar + a * (e_prev @ e_prev.T) + b * Q
+        R = normalize_to_correlation(Q)
+        e = E[t][:, None]
+        sign, logdet = np.linalg.slogdet(R)
+        if sign <= 0 or not np.isfinite(logdet):
+            return 1e12
+        quad = float((e.T @ np.linalg.solve(R, e)).item())
+        total += logdet + quad
+    return total
+
+
+def estimate_dcc(
+    std_resid: pd.DataFrame, fixed_ab: tuple[float, float], shrink: float
+) -> DccParams:
+    """QMLE 估 (a,b)；不收斂 / a+b≥1 / 非有限 → 退回 fixed_ab（誠實 fallback，比照 4a）。"""
+    try:
+        _, E = _resid_matrix(std_resid)
+        Qbar = q_bar(std_resid, shrink)
+    except ValueError:
+        # 樣本不足以估 Q̄：用 fixed_ab + 退化 Q̄=I（維度取自欄數）
+        k = len(std_resid.columns)
+        return DccParams(*fixed_ab, np.eye(k))
+    res = minimize(
+        _dcc_negloglik,
+        x0=np.array([_A_START, _B_START], dtype="float64"),
+        args=(E, Qbar),
+        method="SLSQP",
+        bounds=[(0.0, _AB_UPPER), (0.0, _AB_UPPER)],
+        constraints=[{"type": "ineq", "fun": lambda x: _AB_UPPER - x[0] - x[1]}],
+        options={"maxiter": 200, "ftol": 1e-8},
+    )
+    a, b = float(res.x[0]), float(res.x[1])
+    ok = bool(res.success) and np.isfinite([a, b]).all() and a >= 0 and b >= 0 and a + b < 1.0
+    if not ok:
+        return DccParams(*fixed_ab, Qbar)
+    return DccParams(a=a, b=b, q_bar=Qbar)
