@@ -20,7 +20,7 @@ def _snap(n=60):
 
 
 def _cfg():
-    return make_cfg(["SPY"], risk={"vol_model": "ewma", "corr_window": 30, "garch_window": 100})
+    return make_cfg(["SPY"], risk={"vol_model": "ewma", "garch_window": 100})
 
 
 def test_voltarget_only_holds_spy_with_exposure():

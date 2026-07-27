@@ -84,3 +84,16 @@ def garch_filter_forecast(fixed_params: np.ndarray, returns: pd.Series, horizon:
     if not np.all(np.isfinite(out)):
         raise GarchDegenerateError("濾波多步預測含非有限值（固定參數退化）")
     return out
+
+
+def garch_filter_residuals(fixed_params: np.ndarray, returns: pd.Series) -> pd.Series:
+    """以固定 arch 參數濾波，回標準化殘差 r_t/σ_t（帶 DatetimeIndex，供 DCC）。
+
+    與 GarchArch.standardized_residuals 同定義（scaled_return / 條件波動），
+    但用固定參數（不跑 MLE）——曝險檢查日的便宜路徑。
+    """
+    r = returns.astype("float64").dropna()
+    am = _build_arch_model(r.to_numpy() * _SCALE)
+    res = am.fix(np.asarray(fixed_params, dtype="float64"))
+    cond_vol = np.asarray(res.conditional_volatility, dtype="float64")
+    return pd.Series(r.to_numpy() * _SCALE / cond_vol, index=r.index)

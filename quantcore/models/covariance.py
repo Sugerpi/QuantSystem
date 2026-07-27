@@ -1,8 +1,8 @@
-"""過渡共變異數（規格 §1.6、INV-3）。Σ 的唯一出口。
+"""Σ 的唯一出口（規格 §1.6、INV-3）。
 
-Phase 4b 的相關 R 為滾動樣本相關（DCC 為 Phase 5，此為 placeholder，
-比照 Phase 3 的 rolling_std→GARCH）。INV-3（對稱/PSD/對角線=個別變異數）靠
-「投影 R 為合法 PSD 相關 → Σ=D·R·D」自然同時成立。
+R 由相關模型層（models/correlation/，CorrelationForecaster：dcc | ewma）提供；
+本模組只負責「σ̂ 與合法相關 R → Σ=D·R·D」。INV-3（對稱/PSD/對角線=個別變異數）靠
+「R 經 normalize_to_correlation 為合法 PSD 相關 → Σ=D·R·D」自然同時成立。
 """
 
 from __future__ import annotations
@@ -10,28 +10,21 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from quantcore.models.correlation.base import normalize_to_correlation
+
 
 def rolling_correlation(returns_window: pd.DataFrame) -> pd.DataFrame:
-    """收 date×ticker 報酬窗，回樣本相關矩陣（index/columns = 排序後 ticker，label-aligned）。"""
+    """收 date×ticker 報酬窗，回樣本相關矩陣（index/columns = 排序後 ticker，label-aligned）。
+
+    Phase 5a 起已自 production path 退役（由 CorrelationForecaster 的 dcc/ewma 取代，
+    見 backtest/strategies/vol_target_base.py）。僅保留供測試/研究對照使用。
+    """
     cols = sorted(returns_window.columns)
     w = returns_window[cols].dropna()
     if len(w) < 2:
         raise ValueError("rolling_correlation 需至少 2 筆觀測")
     R = np.atleast_2d(np.corrcoef(w.to_numpy(), rowvar=False))
     return pd.DataFrame(R, index=cols, columns=cols)
-
-
-def _project_to_psd_correlation(R: np.ndarray) -> np.ndarray:
-    """對稱化 → 截負特徵值 → 重正規化對角線為 1（合法 PSD 相關矩陣）。"""
-    R = (R + R.T) / 2.0
-    vals, vecs = np.linalg.eigh(R)
-    vals = np.clip(vals, 0.0, None)
-    R_psd = (vecs * vals) @ vecs.T
-    d = np.sqrt(np.diag(R_psd))
-    d[d == 0.0] = 1.0  # 僅在某列完全落在被截零特徵空間才觸發——真實樣本相關恆 PSD、
-    # 投影近恆等，故不可達；過渡期不另守護。
-    R_corr = R_psd / np.outer(d, d)
-    return (R_corr + R_corr.T) / 2.0  # 數值再對稱化
 
 
 def build_covariance(sigma_hat: dict[str, float], R: pd.DataFrame) -> pd.DataFrame:
@@ -48,7 +41,7 @@ def build_covariance(sigma_hat: dict[str, float], R: pd.DataFrame) -> pd.DataFra
     Rv = np.asarray(R.to_numpy(), dtype="float64")
     if not np.isfinite(Rv).all():
         raise ValueError("共變異數：相關矩陣 R 含非有限值（多為零變異數報酬窗，如停牌/常數資產）")
-    R_psd = _project_to_psd_correlation(Rv)
+    R_psd = normalize_to_correlation(Rv)
     d = np.array([sigma_hat[t] for t in tickers], dtype="float64")
     Sigma = (d[:, None] * R_psd) * d[None, :]
     return pd.DataFrame(Sigma, index=tickers, columns=tickers)

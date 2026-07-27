@@ -14,7 +14,11 @@ import pandas as pd
 
 from quantcore.models.volatility import annualized_forecast_vol, fit_volatility
 from quantcore.models.volatility.base import annualize_variance_path
-from quantcore.models.volatility.garch_arch import GarchArch, garch_filter_forecast
+from quantcore.models.volatility.garch_arch import (
+    GarchArch,
+    garch_filter_forecast,
+    garch_filter_residuals,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +35,7 @@ class VolForecaster:
         self._horizon = horizon
         self._window = garch_window
         self._cache: dict[str, _CacheEntry] = {}
+        self._resid: dict[str, pd.Series] = {}
         if spec not in ("garch_arch", "ewma"):
             raise ValueError(f"VolForecaster 不支援 vol_model={spec!r}（可用：garch_arch | ewma）")
 
@@ -44,6 +49,7 @@ class VolForecaster:
             self._cache[ticker] = _CacheEntry("garch", outcome.model.arch_params, outcome.fell_back)
         else:
             self._cache[ticker] = _CacheEntry("ewma", None, outcome.fell_back)
+        self._resid[ticker] = outcome.model.standardized_residuals
         return annualized_forecast_vol(outcome.model, self._horizon)
 
     def filter(self, ticker: str, returns: pd.Series) -> float:
@@ -55,10 +61,12 @@ class VolForecaster:
         if entry.kind == "garch":
             # 快取參數來自成功的 fit（α+β<1、ω 有限），GARCH(1,1) 解析多步變異數因此
             # 恆有限——garch_filter_forecast 的非有限守護在此不可達。
+            self._resid[ticker] = garch_filter_residuals(entry.arch_params, window)
             return annualize_variance_path(
                 garch_filter_forecast(entry.arch_params, window, self._horizon)
             )
         outcome = fit_volatility("ewma", window, ewma_lambda=self._ewma_lambda)
+        self._resid[ticker] = outcome.model.standardized_residuals
         return annualized_forecast_vol(outcome.model, self._horizon)
 
     def last_fell_back(self, ticker: str) -> bool:
@@ -78,3 +86,7 @@ class VolForecaster:
             "beta": float(p[3]),
             "nu": float(p[4]),
         }
+
+    def last_standardized_residuals(self, ticker: str) -> pd.Series:
+        """該 ticker 上次 refit/filter 的標準化殘差序列（供 CorrelationForecaster）。"""
+        return self._resid[ticker]

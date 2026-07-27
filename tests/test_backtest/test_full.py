@@ -25,7 +25,7 @@ def _snap(n=320):
 def _cfg():
     return make_cfg(
         ["A", "B", "C", "D"],
-        risk={"vol_model": "ewma", "corr_window": 60, "garch_window": 100},
+        risk={"vol_model": "ewma", "garch_window": 100},
         signal={"top_k": 2, "momentum_lookback": 120, "momentum_skip": 5},
         universe={"min_history_days": 130},
     )

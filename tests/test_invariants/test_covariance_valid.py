@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from quantcore.models.correlation.dcc import DccParams, dcc_recursion, q_bar
+from quantcore.models.correlation.ewma_corr import ewma_correlation
 from quantcore.models.covariance import build_covariance
 
 
@@ -42,3 +44,35 @@ def test_covariance_single_asset_is_variance():
     Sigma = build_covariance({"SPY": 0.15}, R)
     assert Sigma.shape == (1, 1)
     assert Sigma.loc["SPY", "SPY"] == pytest.approx(0.15**2)
+
+
+def _resid(n=200, seed=7):
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2020-01-01", periods=n, freq="B")
+    return pd.DataFrame(rng.standard_normal((n, 3)), index=idx, columns=["A", "B", "C"])
+
+
+def test_inv3_holds_with_dcc_R():
+    # Phase 5a：R 來自 DCC 遞迴（而非舊版 rolling sample correlation）時，INV-3 仍成立。
+    E = _resid()
+    R = dcc_recursion(E, DccParams(0.05, 0.9, q_bar(E, 0.10)))
+    sigma = {"A": 0.15, "B": 0.20, "C": 0.10}
+    Sigma = build_covariance(sigma, R)
+    Sigma_np = Sigma.to_numpy()
+    assert np.allclose(Sigma_np, Sigma_np.T)  # 對稱
+    assert np.linalg.eigvalsh(Sigma_np).min() >= -1e-10  # PSD
+    for t in sigma:
+        assert Sigma.loc[t, t] == pytest.approx(sigma[t] ** 2)  # 對角線=個別變異數（label-based）
+
+
+def test_inv3_holds_with_ewma_R():
+    # Phase 5a：R 來自 EWMA 相關時，INV-3 仍成立。
+    E = _resid()
+    R = ewma_correlation(E, lam=0.94)
+    sigma = {"A": 0.15, "B": 0.20, "C": 0.10}
+    Sigma = build_covariance(sigma, R)
+    Sigma_np = Sigma.to_numpy()
+    assert np.allclose(Sigma_np, Sigma_np.T)  # 對稱
+    assert np.linalg.eigvalsh(Sigma_np).min() >= -1e-10  # PSD
+    for t in sigma:
+        assert Sigma.loc[t, t] == pytest.approx(sigma[t] ** 2)  # 對角線=個別變異數（label-based）

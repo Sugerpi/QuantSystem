@@ -56,7 +56,7 @@ def _snap(n=60):
 def _cfg():
     return make_cfg(
         ["A", "B"],
-        risk={"vol_model": "ewma", "corr_window": 30, "garch_window": 100},
+        risk={"vol_model": "ewma", "garch_window": 100},
         signal={"top_k": 2},
     )
 
@@ -95,6 +95,63 @@ def test_band_block_yields_log_only_decision():
     if dec.diagnostics.band_blocked:
         assert dec.execute is False
         assert strat._e_current == e0
+
+
+def test_full_decides_under_both_corr_models():
+    # full 在 corr_model ∈ {ewma, dcc} 下皆決策成功、σ̂_p 有限>0、權重和為 1
+    from quantcore.backtest.strategies.full import Full
+
+    dates = make_dates(320)
+    rng = np.random.default_rng(1)
+    prices = {}
+    for i, tk in enumerate(["A", "B", "C", "D"]):
+        drift = 0.0003 * (i + 1)
+        prices[tk] = list(100 * np.cumprod(1 + rng.normal(drift, 0.01, 320)))
+    snap = make_snapshot(prices, dates)
+    view = make_view(snap, dates[300])
+
+    base_cfg = make_cfg(
+        ["A", "B", "C", "D"],
+        risk={"vol_model": "ewma", "garch_window": 100},
+        signal={"top_k": 2, "momentum_lookback": 120, "momentum_skip": 5},
+        universe={"min_history_days": 130},
+    )
+    for corr in ("ewma", "dcc"):
+        risk = base_cfg.risk.model_copy(update={"corr_model": corr})
+        cfg = base_cfg.model_copy(update={"risk": risk})
+        strat = Full(cfg)
+        dec = strat.decide(view, DecisionEvent.SELECTION)
+        assert dec is not None
+        assert dec.diagnostics.sigma_p is not None
+        assert np.isfinite(dec.diagnostics.sigma_p) and dec.diagnostics.sigma_p > 0
+        assert sum(dec.target_weights.values()) == pytest.approx(1.0)
+
+
+def test_collect_std_residuals_names_stale_ticker():
+    # 逐檔新鮮度守衛：某 selected 檔的殘差快取末日 < view.t（未於本輪 refit/filter），
+    # 必須 hard raise 且訊息點名該 ticker（而非只給矩陣層級的籠統日期不符）。
+    snap, dates = _snap()
+    strat = _FixedRisky(_cfg(), absmom={"A": True, "B": True})
+    view = make_view(snap, dates[50])
+    # 先跑一次正常 SELECTION，讓 forecaster 快取兩檔的標準化殘差。
+    dec = strat.decide(view, DecisionEvent.SELECTION)
+    assert dec is not None
+
+    # 直接測 _collect_std_residuals：把 B 的殘差換成截斷（stale）版本。
+    fresh_b = strat._forecaster.last_standardized_residuals("B")
+    stale_b = fresh_b.iloc[:-3]  # 末日往前推，模擬本輪未 refit/filter 到的舊殘差
+    orig = strat._forecaster.last_standardized_residuals
+
+    def _patched(ticker):
+        return stale_b if ticker == "B" else orig(ticker)
+
+    strat._forecaster.last_standardized_residuals = _patched
+
+    with pytest.raises(ValueError) as excinfo:
+        strat._collect_std_residuals(view, ["A", "B"])
+    msg = str(excinfo.value)
+    assert "B" in msg
+    assert "'A'" not in msg  # A 新鮮，不應被點名為 offender
 
 
 def test_forecast_selected_returns_sigma_params_fellback_triple():
