@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -72,6 +73,8 @@ class RiskConfig(_Strict):
     @model_validator(mode="after")
     def _dcc_fixed_ab_stationary(self) -> RiskConfig:
         a, b = self.dcc_fixed_ab
+        if not math.isfinite(a) or not math.isfinite(b):
+            raise ValueError(f"risk.dcc_fixed_ab {(a, b)} 含非有限值")
         if a < 0 or b < 0 or a + b >= 1.0:
             raise ValueError(f"risk.dcc_fixed_ab {(a, b)} 須 a≥0,b≥0,a+b<1（DCC 平穩）")
         return self

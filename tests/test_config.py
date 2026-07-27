@@ -231,6 +231,31 @@ def test_dcc_fixed_ab_rejects_nonstationary():
         RiskConfig(**base)
 
 
+def test_dcc_fixed_ab_rejects_nonfinite():
+    import pytest
+    from pydantic import ValidationError
+
+    from quantcore.config.schema import RiskConfig
+
+    base = dict(
+        vol_model="garch_arch",
+        corr_model="dcc",
+        vol_target_annual=0.1,
+        exposure_band=0.1,
+        exposure_min=0.1,
+        vol_window=63,
+        ewma_lambda=0.94,
+        forecast_horizon=21,
+        garch_window=1000,
+        corr_window=252,
+        dcc_refit_interval=63,
+        dcc_fixed_ab=(float("nan"), 0.5),
+        dcc_qbar_shrink=0.10,
+    )
+    with pytest.raises(ValidationError):
+        RiskConfig(**base)
+
+
 def test_dcc_refit_interval_zero_is_fixed_mode():
     from quantcore.config.schema import RiskConfig
 
