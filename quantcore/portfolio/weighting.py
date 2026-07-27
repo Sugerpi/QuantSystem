@@ -66,20 +66,24 @@ def erc_weights(cov: pd.DataFrame) -> dict[str, float]:
     s = np.asarray(cov.to_numpy(), dtype="float64")
     if not np.isfinite(s).all():
         raise ValueError("erc_weights：共變異數含非有限值")
-    if n == 1:
-        return {tickers[0]: 1.0}
     diag = np.diag(s)
     if np.any(diag <= 0.0):
         raise ValueError("erc_weights：共變異數對角線須為正（零/負變異數）")
+    if n == 1:
+        return {tickers[0]: 1.0}
     c = 1.0  # 等風險預算；正規化後不影響解
     w = 1.0 / np.sqrt(diag)  # inverse-vol 暖啟
     w = w / w.sum()
+    converged = False
     for _ in range(_ERC_MAX_ITER):
         w_old = w.copy()
         for i in range(n):
             beta = float(s[i] @ w - s[i, i] * w[i])  # Σ_{j≠i} Σ_ij w_j（Gauss-Seidel：用最新 w）
             w[i] = (-beta + np.sqrt(beta * beta + 4.0 * s[i, i] * c)) / (2.0 * s[i, i])
         if np.max(np.abs(w - w_old)) < _ERC_TOL:
+            converged = True
             break
+    if not converged:
+        raise ValueError(f"erc_weights：CCD 於 {_ERC_MAX_ITER} 輪內未收斂（Σ 可能病態）")
     w = w / w.sum()
     return {t: float(wi) for t, wi in zip(tickers, w, strict=True)}

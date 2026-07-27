@@ -121,3 +121,34 @@ def test_erc_deterministic():
     corr = np.array([[1.0, 0.5], [0.5, 1.0]])
     cov = _cov([0.15, 0.25], corr)
     assert erc_weights(cov) == erc_weights(cov)
+
+
+def test_erc_near_singular_high_correlation_converges():
+    # normalize_to_correlation 可能交出趨近奇異的 Σ（相關近 1）；CCD 仍應收斂
+    rho = 0.98
+    corr = np.array([[1.0, rho, rho], [rho, 1.0, rho], [rho, rho, 1.0]])
+    cov = _cov([0.15, 0.20, 0.25], corr)
+    w = erc_weights(cov)
+    labels = list(cov.columns)
+    wv = np.array([w[t] for t in labels])
+    rc = wv * (cov.to_numpy() @ wv)
+    assert np.allclose(rc, rc.mean(), rtol=1e-3)
+    assert abs(sum(w.values()) - 1.0) < 1e-9
+
+
+def test_erc_raises_on_nonconvergence(monkeypatch):
+    import quantcore.portfolio.weighting as wmod
+
+    monkeypatch.setattr(wmod, "_ERC_MAX_ITER", 1)  # 1 輪不足以收斂到 1e-10
+    corr = np.array([[1.0, 0.5, 0.2], [0.5, 1.0, 0.4], [0.2, 0.4, 1.0]])
+    cov = _cov([0.15, 0.25, 0.10], corr)
+    with pytest.raises(ValueError):
+        erc_weights(cov)
+
+
+def test_erc_single_asset_nonpositive_diag_raises():
+    import pytest
+
+    cov = pd.DataFrame([[0.0]], index=["A"], columns=["A"])
+    with pytest.raises(ValueError):
+        erc_weights(cov)
