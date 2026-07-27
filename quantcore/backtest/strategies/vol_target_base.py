@@ -1,7 +1,11 @@
-"""波動目標曝險機制基底（規格 §1.6/§1.7）。full/voltarget_only 共用。
+"""波動目標曝險機制基底（規格 §1.6/§1.7）。full/voltarget_only/full_erc 共用。
 
 有狀態（forecaster + e_current + 上次選擇快取），引擎每 run 新建（比照 bh_spy，不破 INV-6）。
-子類實作 _select_and_weight（選擇日：選標的、相對權重、refit σ̂）。
+子類兩種接法：
+- inverse-vol 類（full/voltarget_only）：實作 `_select_and_weight`（選擇日算好 w_risky），走 base 的
+  `decide()`（`_select_and_weight → _build_cov → _exposure_decision`）。
+- cov-first 類（full_erc，ERC 權重需完整 Σ）：覆寫 `decide()`（`_build_cov` 後才算 w_risky），直接
+  複用共用 helper `_build_cov`/`_exposure_decision`；`_select_and_weight` 不適用（raise）。
 """
 
 from __future__ import annotations

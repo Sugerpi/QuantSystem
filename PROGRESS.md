@@ -378,6 +378,17 @@ ERC vs inverse-vol 消融**（相關影響「配置」的通道，需優化器 +
   ERC 仍未勝出——與 5a「DCC 對 EWMA 無顯著貢獻」一致，複雜度在本樣本期均未自證其值。
 - 以 `requires_snapshot` 本機閘門 `test_phase5b_ac.py` 守護（full/full_erc 皆跑完整回測 + 配對 bootstrap）。
 
+### Phase 5b 最終 holistic review（opus）結果
+六條接縫逐一追查全乾淨：full/full_erc apples-to-apples 結構性成立（同 momentum_select/σ̂/Σ/曝險、
+w_risky 不回饋 forecaster 狀態、共用單一 clock、corr 每決策一次不 double-refit）、相關→權重通道正確
+（erc_weights 與 σ̂_p 用同一 Σ）、`_select_and_weight` 的 NotImplementedError 經引擎不可達、K=1/absmom
+轉現金/band-blocked 邊界皆守、決定性守。無 Critical/Important。三個 Minor：
+- **M1（已修）** base docstring 過時（未提 full_erc 覆寫 decide()）→ 已更新。
+- **M2（v1 刻意語意）** ERC 下曝險檢查：相關漂移期內只反映在曝險純量、權重到下次選擇才重配（與
+  inverse-vol 對稱、pre-existing 曝險設計）。新語意面：相關現在也設權重、但只在選擇節奏——v1 可接受。
+- **M3（backlog）** `_ERC_TOL` 為未正規化權重的絕對容差（隨 cov 尺度耦合）；因 build_covariance 單一
+  尺度入口而穩定、所有測試（含 ρ=0.98 近奇異、非收斂）皆過，非 live 缺陷。日後可改相對/正規化後容差。
+
 ### Phase 5 邊界
 **Phase 5 全部 AC 達成 ✅**（DCC vs EWMA、ERC vs inverse-vol 兩消融結論皆明確寫入、皆為 §5.3 合格的
 「無顯著貢獻」結論）。v1 生產路徑：**EWMA 相關 + inverse-vol 權重**（兩個簡單基線皆未被進階版打敗）；
