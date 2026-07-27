@@ -97,6 +97,36 @@ def test_band_block_yields_log_only_decision():
         assert strat._e_current == e0
 
 
+def test_full_decides_under_both_corr_models():
+    # full 在 corr_model ∈ {ewma, dcc} 下皆決策成功、σ̂_p 有限>0、權重和為 1
+    from quantcore.backtest.strategies.full import Full
+
+    dates = make_dates(320)
+    rng = np.random.default_rng(1)
+    prices = {}
+    for i, tk in enumerate(["A", "B", "C", "D"]):
+        drift = 0.0003 * (i + 1)
+        prices[tk] = list(100 * np.cumprod(1 + rng.normal(drift, 0.01, 320)))
+    snap = make_snapshot(prices, dates)
+    view = make_view(snap, dates[300])
+
+    base_cfg = make_cfg(
+        ["A", "B", "C", "D"],
+        risk={"vol_model": "ewma", "corr_window": 60, "garch_window": 100},
+        signal={"top_k": 2, "momentum_lookback": 120, "momentum_skip": 5},
+        universe={"min_history_days": 130},
+    )
+    for corr in ("ewma", "dcc"):
+        risk = base_cfg.risk.model_copy(update={"corr_model": corr})
+        cfg = base_cfg.model_copy(update={"risk": risk})
+        strat = Full(cfg)
+        dec = strat.decide(view, DecisionEvent.SELECTION)
+        assert dec is not None
+        assert dec.diagnostics.sigma_p is not None
+        assert np.isfinite(dec.diagnostics.sigma_p) and dec.diagnostics.sigma_p > 0
+        assert sum(dec.target_weights.values()) == pytest.approx(1.0)
+
+
 def test_forecast_selected_returns_sigma_params_fellback_triple():
     from quantcore.backtest.strategies.vol_target_base import forecast_selected
     from quantcore.models.volatility.forecaster import VolForecaster

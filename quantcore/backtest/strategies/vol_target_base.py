@@ -15,7 +15,8 @@ from quantcore.backtest.accounting import CASH
 from quantcore.backtest.ptview import PointInTimeView
 from quantcore.backtest.strategy import Decision, DecisionEvent, Diagnostics, Strategy
 from quantcore.config import QuantConfig
-from quantcore.models.covariance import build_covariance, portfolio_vol, rolling_correlation
+from quantcore.models.correlation.forecaster import CorrelationForecaster
+from quantcore.models.covariance import build_covariance, portfolio_vol
 from quantcore.models.volatility.forecaster import VolForecaster
 from quantcore.portfolio.exposure import target_exposure
 
@@ -33,8 +34,13 @@ class RiskyState:
 
 
 def ticker_returns(view: PointInTimeView, ticker: str) -> pd.Series:
-    """該檔 ≤t 的日報酬（自 adj_close）。"""
-    return view.history(ticker)["adj_close"].astype("float64").pct_change().dropna()
+    """該檔 ≤t 的日報酬（自 adj_close，date 為 index）。
+
+    index 設為 date（而非 view.history 的位置索引）：VolForecaster 快取的標準化殘差
+    沿用此 index，_collect_std_residuals 才能以日期比對決策當日的新鮮度（見該方法）。
+    """
+    h = view.history(ticker).set_index("date")
+    return h["adj_close"].astype("float64").pct_change().dropna()
 
 
 def forecast_selected(
@@ -53,14 +59,6 @@ def forecast_selected(
     return sigma_hat, garch_params, fell_back
 
 
-def _selected_returns_window(
-    view: PointInTimeView, selected: list[str], window: int
-) -> pd.DataFrame:
-    """date×ticker 報酬窗（選定資產尾端 window 根），供 rolling_correlation。"""
-    wide = view.prices.pivot(index="date", columns="ticker", values="adj_close").sort_index()
-    return wide[selected].pct_change().tail(window)
-
-
 class VolTargetStrategy(Strategy):
     def __init__(self, cfg: QuantConfig) -> None:
         super().__init__(cfg)
@@ -69,6 +67,14 @@ class VolTargetStrategy(Strategy):
             cfg.risk.ewma_lambda,
             cfg.risk.forecast_horizon,
             cfg.risk.garch_window,
+        )
+        self._corr = CorrelationForecaster(
+            cfg.risk.corr_model,
+            cfg.risk.ewma_lambda,
+            cfg.risk.dcc_refit_interval,
+            tuple(cfg.risk.dcc_fixed_ab),
+            cfg.schedule.selection_interval,
+            cfg.risk.dcc_qbar_shrink,
         )
         self._e_current: float | None = None
         self._cache: RiskyState | None = None
@@ -83,6 +89,26 @@ class VolTargetStrategy(Strategy):
             t: self._forecaster.filter(t, ticker_returns(view, t)) for t in cached.selected
         }
         return replace(cached, sigma_hat=sigma_hat)
+
+    def _collect_std_residuals(self, view: PointInTimeView, selected: list[str]) -> pd.DataFrame:
+        """組 selected 各檔標準化殘差為 date×ticker 矩陣（按日交集）。
+
+        殘差由 VolForecaster 在本次 refit/filter 已快取。斷言矩陣最後一列＝決策當日，
+        防「漏對某檔 refit/filter → 吃到前次 selection 的 stale 殘差」（INV-3 驗不到輸入新鮮度）。
+        """
+        series = {t: self._forecaster.last_standardized_residuals(t) for t in selected}
+        mat = pd.concat(series, axis=1)
+        mat.columns = list(series.keys())
+        mat = mat.dropna()
+        if mat.empty:
+            raise ValueError("標準化殘差矩陣為空（selected 各檔無共同日期）")
+        as_of = view.t
+        if mat.index[-1] != as_of:
+            raise ValueError(
+                f"標準化殘差矩陣最後一列 {mat.index[-1]} ≠ 決策當日 {as_of}："
+                "可能有 selected 檔未於本次 refit/filter"
+            )
+        return mat
 
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
         cfg = self._cfg
@@ -99,8 +125,12 @@ class VolTargetStrategy(Strategy):
             state = self._refilter(view, self._cache)
             e_current = self._e_current
 
-        window = _selected_returns_window(view, state.selected, cfg.risk.corr_window)
-        R = rolling_correlation(window)
+        std_resid = self._collect_std_residuals(view, state.selected)
+        R = (
+            self._corr.refit(std_resid)
+            if event is DecisionEvent.SELECTION
+            else self._corr.filter(std_resid)
+        )
         cov = build_covariance(state.sigma_hat, R)
         sigma_p = portfolio_vol(state.w_risky, cov)
         exp = target_exposure(
