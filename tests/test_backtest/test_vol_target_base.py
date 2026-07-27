@@ -127,6 +127,33 @@ def test_full_decides_under_both_corr_models():
         assert sum(dec.target_weights.values()) == pytest.approx(1.0)
 
 
+def test_collect_std_residuals_names_stale_ticker():
+    # 逐檔新鮮度守衛：某 selected 檔的殘差快取末日 < view.t（未於本輪 refit/filter），
+    # 必須 hard raise 且訊息點名該 ticker（而非只給矩陣層級的籠統日期不符）。
+    snap, dates = _snap()
+    strat = _FixedRisky(_cfg(), absmom={"A": True, "B": True})
+    view = make_view(snap, dates[50])
+    # 先跑一次正常 SELECTION，讓 forecaster 快取兩檔的標準化殘差。
+    dec = strat.decide(view, DecisionEvent.SELECTION)
+    assert dec is not None
+
+    # 直接測 _collect_std_residuals：把 B 的殘差換成截斷（stale）版本。
+    fresh_b = strat._forecaster.last_standardized_residuals("B")
+    stale_b = fresh_b.iloc[:-3]  # 末日往前推，模擬本輪未 refit/filter 到的舊殘差
+    orig = strat._forecaster.last_standardized_residuals
+
+    def _patched(ticker):
+        return stale_b if ticker == "B" else orig(ticker)
+
+    strat._forecaster.last_standardized_residuals = _patched
+
+    with pytest.raises(ValueError) as excinfo:
+        strat._collect_std_residuals(view, ["A", "B"])
+    msg = str(excinfo.value)
+    assert "B" in msg
+    assert "'A'" not in msg  # A 新鮮，不應被點名為 offender
+
+
 def test_forecast_selected_returns_sigma_params_fellback_triple():
     from quantcore.backtest.strategies.vol_target_base import forecast_selected
     from quantcore.models.volatility.forecaster import VolForecaster

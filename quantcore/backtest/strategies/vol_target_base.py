@@ -93,21 +93,28 @@ class VolTargetStrategy(Strategy):
     def _collect_std_residuals(self, view: PointInTimeView, selected: list[str]) -> pd.DataFrame:
         """組 selected 各檔標準化殘差為 date×ticker 矩陣（按日交集）。
 
-        殘差由 VolForecaster 在本次 refit/filter 已快取。斷言矩陣最後一列＝決策當日，
-        防「漏對某檔 refit/filter → 吃到前次 selection 的 stale 殘差」（INV-3 驗不到輸入新鮮度）。
+        殘差由 VolForecaster 在本次 refit/filter 已快取。逐檔斷言殘差新鮮
+        （最後一列＝決策當日 view.t），防「漏對某檔 refit/filter →
+        吃到前次 selection 的 stale 殘差」（INV-3 驗不到輸入新鮮度）。
+        誠實失敗：hard raise（靜默排除某檔會使 σ̂_p 低估、曝險過高）。錯誤訊息點名各 offender
+        的殘差末日，便於分辨「數週 stale（程式缺失）」與「差 1-2 天（資料缺口）」。
         """
         series = {t: self._forecaster.last_standardized_residuals(t) for t in selected}
+        stale = {
+            t: (s.index[-1] if not s.empty else None)
+            for t, s in series.items()
+            if s.empty or s.index[-1] != view.t
+        }
+        if stale:
+            raise ValueError(
+                f"標準化殘差非新鮮（決策日 {view.t}）：各 offender 末日 {stale}"
+                "——可能有 selected 檔未於本次 refit/filter，或該檔今日缺 bar"
+            )
         mat = pd.concat(series, axis=1)
         mat.columns = list(series.keys())
         mat = mat.dropna()
         if mat.empty:
             raise ValueError("標準化殘差矩陣為空（selected 各檔無共同日期）")
-        as_of = view.t
-        if mat.index[-1] != as_of:
-            raise ValueError(
-                f"標準化殘差矩陣最後一列 {mat.index[-1]} ≠ 決策當日 {as_of}："
-                "可能有 selected 檔未於本次 refit/filter"
-            )
         return mat
 
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
