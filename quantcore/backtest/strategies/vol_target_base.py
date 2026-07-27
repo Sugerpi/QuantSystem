@@ -118,7 +118,6 @@ class VolTargetStrategy(Strategy):
         return mat
 
     def decide(self, view: PointInTimeView, event: DecisionEvent) -> Decision | None:
-        cfg = self._cfg
         if event is DecisionEvent.SELECTION:
             state = self._select_and_weight(view)
             if state is None:
@@ -131,14 +130,30 @@ class VolTargetStrategy(Strategy):
             assert self._e_current is not None  # _cache 已設 ⟹ 選擇日已賦值 _e_current
             state = self._refilter(view, self._cache)
             e_current = self._e_current
+        cov = self._build_cov(view, state.selected, state.sigma_hat, event)
+        return self._exposure_decision(state, cov, e_current)
 
-        std_resid = self._collect_std_residuals(view, state.selected)
+    def _build_cov(
+        self,
+        view: PointInTimeView,
+        selected: list[str],
+        sigma_hat: dict[str, float],
+        event: DecisionEvent,
+    ) -> pd.DataFrame:
+        """殘差 → corr.refit(選擇日)/filter(曝險檢查日) → build_covariance。每次決策呼叫一次。"""
+        std_resid = self._collect_std_residuals(view, selected)
         R = (
             self._corr.refit(std_resid)
             if event is DecisionEvent.SELECTION
             else self._corr.filter(std_resid)
         )
-        cov = build_covariance(state.sigma_hat, R)
+        return build_covariance(sigma_hat, R)
+
+    def _exposure_decision(
+        self, state: RiskyState, cov: pd.DataFrame, e_current: float | None
+    ) -> Decision:
+        """σ̂_p → target_exposure → 最終權重 + 現金 + Diagnostics + log-only Decision。"""
+        cfg = self._cfg
         sigma_p = portfolio_vol(state.w_risky, cov)
         exp = target_exposure(
             sigma_p,
@@ -147,14 +162,12 @@ class VolTargetStrategy(Strategy):
             cfg.risk.exposure_band,
             e_current,
         )
-
         weights = {
             t: exp.exposure_applied * state.w_risky[t]
             for t in state.selected
             if state.absmom.get(t, False)
         }
         cash = 1.0 - sum(weights.values())
-
         diag = Diagnostics(
             eligible=state.eligible,
             selected=state.selected,
