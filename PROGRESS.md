@@ -18,7 +18,7 @@
 | 2 | 回測核心（最關鍵） | ~1-2 週 | ✅ 完成 |
 | 3 | 訊號與組合層 | ~1 週 | ✅ 完成 |
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ✅ 完成（全 AC 達成） |
-| 5 | DCC 與 ERC | ~1 週 | ⬜ 未開始 |
+| 5 | DCC 與 ERC | ~1 週 | 🟨 進行中（5a 相關模型層 ✅，5b ERC ⬜）|
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ⬜ 未開始 |
 | 7 | Dashboard 與研究報告 | ~2.5 週 | ⬜ 未開始 |
 
@@ -248,19 +248,82 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
 
 ---
 
-## Phase 5 — DCC 與 ERC　⬜
+## Phase 5 — DCC 與 ERC　🟨（5a ✅，5b ERC 未開始）
 
-DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
+依 brainstorming 切兩段：**5a 相關模型層**（DCC/EWMA-corr，✅）、**5b ERC 權重**（⬜）。
+設計/計畫見 `docs/superpowers/specs/2026-07-26-phase5a-correlation-model-design.md`、
+`docs/superpowers/plans/2026-07-26-phase5a-correlation-model.md`。
 
 ### 任務
-- [ ] `models/correlation/base.py`
-- [ ] `models/correlation/dcc.py`（DCC(1,1)，兩步 QMLE，PSD 內部封裝）
-- [ ] `models/correlation/ewma_corr.py`（消融基線）
-- [ ] `models/covariance.py`（Σ = D·R·D + PSD 投影，唯一出口，INV-3）
-- [ ] ERC 權重選項（`portfolio/weighting.py`）
+- [x] `models/correlation/base.py`（`normalize_to_correlation`，R 合法性單一出口，INV-3）— 5a
+- [x] `models/correlation/dcc.py`（DCC(1,1) 兩步 QMLE，對稱化/shrinkage/正規化內部封裝）— 5a
+- [x] `models/correlation/ewma_corr.py`（消融基線）— 5a
+- [x] `models/correlation/forecaster.py`（`CorrelationForecaster` refit/filter，鏡射 VolForecaster）— 5a
+- [x] `models/covariance.py`（Σ = D·R·D，唯一出口收斂、R 由相關層派發，INV-3）— 5a
+- [ ] ERC 權重選項（`portfolio/weighting.py`）— **5b**
 
 ### AC
-- [ ] DCC vs EWMA 消融結論明確寫入報告（「無顯著貢獻」也是合格結論）
+- [x] **DCC vs EWMA 消融結論明確寫入報告**（見下方 5a 結論）——**5a AC 達成 ✅**
+- [ ] ERC vs inverse-vol 消融（5b）
+
+### Phase 5a 實作備忘（與原規劃的差異，詳見設計文件 §4）
+1. **手寫 DCC(1,1)（arch 無 DCC，Python 無可信套件）**：DCC 第二步（(a,b) QMLE + Q_t 遞迴 +
+   R 正規化）自寫；單變量 σ_t 仍用 arch（Phase 4）。此為缺替代品、非 Phase 6 手刻里程碑。
+   正確性以**合成回收測試**（已知 (a,b) 於 3000 樣本回收，含高持續性 a+b=0.98 邊界 + 雙 seed，
+   誤差 <0.005）+ 不變量守護建立信心（無 arch 那樣的 parity 參照）。
+2. **標準化殘差複用 VolForecaster**（`last_standardized_residuals` + `garch_filter_residuals`）：
+   不讓相關層重跑單變量 GARCH；vol 與 corr 用同一組殘差、一致。
+3. **`CorrelationForecaster` refit/filter 鏡射 VolForecaster**：貴的 (a,b) QMLE 每 63 交易日
+   （=每 3 次選擇，內部計數器、免日曆、決定性）重估、便宜的 Q_t 遞迴每次決策；Q̄ 每次選擇隨
+   輪動資產集重算。fixed 模式（`dcc_refit_interval=0`）用 `dcc_fixed_ab`、永不 QMLE。
+4. **`corr_model` 預設翻 `ewma`**（Phase 4 曾誤設 dcc 但從未接線）：依 §5.3「DCC 須先打敗基線」
+   紀律，接線後預設用已證 EWMA，DCC 消融勝出才翻。
+5. **config**：新增 `dcc_refit_interval`（單鍵收攏 fixed/reestimate）、`dcc_fixed_ab`、
+   `dcc_qbar_shrink`（Q̄ shrinkage，原為硬編常數、依 CLAUDE.md 無魔術數字規則移入 config）；
+   **移除死參數 `corr_window`**（過渡 rolling 相關退役後無消費端）。
+6. **`rolling_correlation` 退役**（Phase 4 過渡 placeholder）；基線改為 EWMA-corr（§5.3）。
+
+### Phase 5a 過程中補強（兩段式 review 抓到並修，8 項）
+- **`normalize_to_correlation` 對零變異數對角線塌陷改為拋錯**（原靜默 `d==0→1` 產出 R_ii=0）：
+  新 EWMA/DCC 走 `np.cov`、常數欄給 0 逃過 finiteness 檢查 → 靜默腐蝕下游變異數（相對舊 rolling
+  經 corrcoef→NaN→拋錯 為安全退步）。誠實失敗，比照 `portfolio_vol`/`inverse_vol`。
+- **`DccParams` `eq=False`**：frozen dataclass 含 ndarray 欄位，預設 `__eq__/__hash__` 會拋錯。
+- **`estimate_dcc` 加 `fell_back` 觀測信號 + 收窄 `except`**：消融比較 reestimate vs fixed，若重估
+  靜默退回 fixed 會使消融失真；且原 `except` 把零變異數/shrink 非法一併吞回（抵銷上一項 hardening）。
+- **`CorrelationForecaster` reuse 分支保留 `fell_back`**（否則 2/3 選擇日漏算 fallback）+ cadence
+  spy 測試（鎖 fixed-vs-reestimate 命脈）。
+- **`dcc_fixed_ab` 拒非有限值**（NaN/inf，比照 estimate_dcc/forecast 的 isfinite 慣例）。
+- **整合任務修掉跨模組潛在 bug**：`ticker_returns` 原 `reset_index(drop=True)` → 殘差帶 RangeIndex，
+  使 DCC/EWMA 的 `pd.concat` **按位置而非日期對齊**（不同歷史長度資產會靜默錯位、INV-3 驗不到）。
+  改 `set_index("date")` 修正（`garch_filter_residuals` docstring 早已聲稱「帶 DatetimeIndex 供 DCC」
+  卻為假）。並加 `_collect_std_residuals` 逐檔新鮮度斷言（點名 stale offender）。
+
+### Phase 5a AC 實測與**誠實科學結論**（快照 `2026-07-16_20ed09`，full & voltarget_only）
+
+| 配置 | 策略 | Sharpe | MaxDD | Calmar | 平均曝險 | 實現年化波動 |
+|------|------|--------|-------|--------|---------|------------|
+| ewma | full | 0.602 | −14.9% | 0.489 | 0.731 | 9.68% |
+| dcc-reest | full | 0.591 | −14.9% | 0.486 | 0.734 | 9.75% |
+| dcc-fixed | full | 0.600 | −14.8% | 0.497 | 0.738 | 9.84% |
+| （任一）| voltarget_only | 0.580 | −24.3% | 0.288 | 0.666 | 9.58% |
+
+- **voltarget_only 三相關模型下完全相同**（K=1 只有 SPY，R=[[1]]）——結構性驗證「相關只在 K>1 有作用」。
+- **σ*±2% AC 兩相關模型皆守**：full/voltarget 實現波動全落 8–12%（`test_phase5a_ac.py` 本機閘門，
+  ewma/dcc 兩參數皆過）。
+- **配對 bootstrap（full：dcc-reest − ewma，§6.3）**：Sharpe 差 −0.011、CI [−0.031, +0.010]、**含 0**；
+  Calmar 差 −0.003、CI [−0.040, +0.011]、**含 0**。point estimate 甚至微偏 EWMA。
+- **§5.3 合格結論**：**DCC 對 EWMA 無統計顯著貢獻**（配對 CI 皆含 0、點估計微偏 EWMA）。
+  **v1 出貨用 EWMA（已設為預設），DCC 留作 config/研究選項**。這是規格明言「DCC 沒有顯著貢獻也是
+  合格、甚至更誠實」的結論——與 Phase 4c 一致、符合規格「文獻顯示兩者績效差距通常很小」。原因：相關
+  只透過 σ̂_p 影響曝險純量，波動目標已把組合波動穩在 ~10%，top-5 籃子的 DCC/EWMA 相關差異不足以
+  改變曝險。
+- **效能**：profiling 單次 full 回測 ewma 51s / dcc-reest 167s（QMLE 主導）/ dcc-fixed 53s——本機
+  AC 閘門可接受（比照 Phase 4 ~559s）。設計 review 提的兩個效能優化（negloglik 內迴圈對角 rescale、
+  filter 單次 fix）**經 profiling 確認非必要，不做**（避免臆測性優化）。
+
+### Phase 5a 邊界
+相關模型層完整（DCC/EWMA-corr、refit/filter、config 開關、消融結論）。**5b 做 ERC 權重選項 +
+ERC vs inverse-vol 消融**（相關影響「配置」的通道，需優化器 + PSD）。
 
 ---
 
@@ -309,3 +372,5 @@ DCC（含參數 walk-forward 重估開關）、ERC 權重選項。
 - 2026-07-22：**Phase 4b-1 基礎模組完成**——`portfolio/exposure.py`（波動目標 + 更新帶，唯一曝險出口；帶只作用於曝險檢查日）、`models/covariance.py`（過渡滾動樣本相關 Σ=D·R·D，投影 R 保 PSD+對角線=個別變異數，INV-3）、`VolForecaster`（refit/filter 分離 + 有上界滾動窗 `garch_window`=1000，成本 O(cap) 不爆炸）、`garch_filter_forecast`（arch `fix()` 固定參數濾波）。全套測試 242 項綠。以 subagent-driven TDD 執行 7 個 task，實質模組經 spec + code-quality 兩段式 review。**順帶補建缺席已久的 INV-3 守護測試**（`test_covariance_valid.py`——與 INV-4 同，CLAUDE.md 早列卻不存在；經 mutation 驗證有牙齒）。過程 review 補強：covariance 出口拒絕非有限 R、GARCH `arch_model` 規格單一來源、filter 補守護、cache 改 dataclass。邊界：未碰 engine/策略，待 4b-2 組裝（含 stale-cache 呼叫端契約）。4 處規格偏離見上方 Phase 4b-1 備忘。
 - 2026-07-22：**Phase 4b-2 策略 + engine 接線完成**——engine log-only decision（`Decision.execute`：band-blocked 曝險檢查落診斷不交易，§1.7/§6.2）、`VolTargetStrategy` 曝險機制基底（selection refit / exposure-check filter / build_covariance→portfolio_vol→target_exposure→最終權重）、`voltarget_only`（SPY，波動目標乾淨測）、`full`（動量+inverse-vol+absmom+波動目標，§1.6 Step 3 權重公式）、`mom_ivol` 遷移到 GARCH σ̂（與 full 同估計器，消融 apples-to-apples）、`Diagnostics` 決策當下記 `vol_fell_back`/`garch_params`（§6.2）、config `corr_window`(252) + `vol_model` 預設翻 `garch_arch`（§5.2 GARCH 轉正）。**七策略齊備**。全套測試 270 項綠。以 subagent-driven TDD 執行 12 個 task，實質模組經 spec + code-quality 兩段式 review。過程 review 補強：VolForecaster eager spec 驗證、forecast_selected 共用 helper、log-only pd.isna 契約。**σ*±2% AC 條件化重定義**（voltarget_only 全期 / full 限 absmom 大致全過期間，隔離波動目標層）。6 處規格偏離見上方 Phase 4b-2 備忘。**邊界：4c 做 bootstrap + 七策略消融全表 + σ*±2% 條件式量測**。
 - 2026-07-24：**Phase 4c 完成，Phase 4 全部 AC 達成**——抽 `momentum_select` 共用（消融選擇由結構保證一致）、stationary block bootstrap（配對差異檢定 full vs 消融版，seed 走 config 守 INV-6）、平均曝險、子期間分析（2005-09/2010-19/2020-）、σ*±2% 條件式量測（`vol_target_ac.py` 讀 run 產物、日層級閾值子集）、七策略消融全表 + baseline 配對 bootstrap。全套測試 300 綠（+ `requires_snapshot` 本機 AC 閘門）。以 subagent-driven TDD 執行 10 個 task。**AC 實測**：voltarget_only 全期實現波動 9.64%、full 閾值/嚴格版 9.86%（皆落 σ*=10%±2%）；七策略消融表產出。**誠實科學結論**：full 的 MaxDD −14.4%/Calmar 0.51 為全場最佳（回撤控制明顯較好），但對每個消融版的 Sharpe/Calmar 配對 bootstrap CI 皆含 0（優勢不顯著）——§6.3 明言的合格結論，波動目標層在本樣本期未證明對風險調整報酬有統計顯著貢獻。5 處規格偏離見上方 Phase 4c 備忘。**Phase 4 全部 AC 達成 ✅**，消融結果即研究報告骨架。
+- 2026-07-27：Phase 4 併回 main（remote 已由 **PR #3** 合過同分支，比照 Phase 3 對齊 origin/main、未硬推），並開 `feature/phase5-dcc-erc`。
+- 2026-07-27：**Phase 5a 相關模型層完成，5a AC 達成**——`models/correlation/`（`normalize_to_correlation` R 合法性單一出口、DCC(1,1) 兩步 QMLE、EWMA-corr 基線、`CorrelationForecaster` refit/filter 鏡射 VolForecaster）、`covariance.py` 唯一出口收斂（R 由相關層依 `corr_model` 派發、`rolling_correlation` 退役）、標準化殘差管線複用 VolForecaster、config 加 `dcc_refit_interval`/`dcc_fixed_ab`/`dcc_qbar_shrink` 並移除死參數 `corr_window`、預設 `corr_model` 翻 `ewma`。全套測試 335 綠（+ `requires_snapshot` 本機 AC 閘門 `test_phase5a_ac.py`）。以 subagent-driven TDD 執行 12 個 task，實質模組經 spec + code-quality 兩段式 review，抓修 8 項實質問題（零變異數靜默腐蝕、frozen dataclass footgun、shrink 魔術數字、DCC 靜默 fallback 無信號、`ticker_returns` RangeIndex 跨模組對齊 bug 等，見上方備忘）。**手寫 DCC 正確性以合成回收測試建立**（已知 (a,b) 於 3000 樣本回收、含高持續性 a+b=0.98 邊界 + 雙 seed，誤差 <0.005；無 arch 那樣的 parity 參照）。**AC 誠實結論**：DCC vs EWMA 消融——full 在 ewma/dcc 下 Sharpe 0.602 vs 0.591、Calmar 0.489 vs 0.486、MaxDD 全 ~−14.9%、實現波動全落 σ*±2%；配對 bootstrap（dcc−ewma）Sharpe/Calmar CI 皆含 0、點估計微偏 EWMA——**DCC 無統計顯著貢獻，v1 出貨用 EWMA（預設）、DCC 留 config/研究選項**（§5.3 明言的合格結論，與 Phase 4c 一致）。voltarget_only（K=1）三相關模型下完全相同，結構性驗證相關只在 K>1 有作用。6 處規格偏離見上方 Phase 5a 備忘。**邊界：5b 做 ERC 權重 + ERC vs inverse-vol 消融**。
