@@ -312,6 +312,9 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
   ewma/dcc 兩參數皆過）。
 - **配對 bootstrap（full：dcc-reest − ewma，§6.3）**：Sharpe 差 −0.011、CI [−0.031, +0.010]、**含 0**；
   Calmar 差 −0.003、CI [−0.040, +0.011]、**含 0**。point estimate 甚至微偏 EWMA。
+- **DCC 估計稽核**：`dcc-reest` 全期 82 個 QMLE 重估點僅 **1 次（1.2%）** fell_back 到 fixed_ab——
+  DCC 在 98.8% 重估點真的估出 (a,b)，故「無顯著貢獻」反映的是**真實 DCC 估計**、非大量靜默退回 fixed
+  的假象（且 dcc-reest 0.591 ≠ dcc-fixed 0.600 兩列有差亦佐證 QMLE 有作用）。
 - **§5.3 合格結論**：**DCC 對 EWMA 無統計顯著貢獻**（配對 CI 皆含 0、點估計微偏 EWMA）。
   **v1 出貨用 EWMA（已設為預設），DCC 留作 config/研究選項**。這是規格明言「DCC 沒有顯著貢獻也是
   合格、甚至更誠實」的結論——與 Phase 4c 一致、符合規格「文獻顯示兩者績效差距通常很小」。原因：相關
@@ -321,9 +324,24 @@ Provider 介面、yfinance/Tiingo/TwelveData/FRED adapters、快照建立與 has
   AC 閘門可接受（比照 Phase 4 ~559s）。設計 review 提的兩個效能優化（negloglik 內迴圈對角 rescale、
   filter 單次 fix）**經 profiling 確認非必要，不做**（避免臆測性優化）。
 
+### Phase 5a 最終 holistic review（opus）結果與待處理項
+六條跨模組接縫逐一追查：refit/filter 節奏鎖步、K=1 退化路徑、「相關只影響 σ̂_p 不影響權重/選擇」
+不變量無洩漏、殘差管線端到端決定性（INV-6）四條完全乾淨且有測試佐證；INV-3 守護已擴充至 DCC/EWMA
+真實 R 來源。抓到 1 Important + 3 Minor：
+- **I-1（Important）DCC `fell_back` 可觀測性死路**：`estimate_dcc` 產生、forecaster 保留，但無
+  production 消費端（不進 `Diagnostics`/`decisions.parquet`），使研究結論的 fallback 佔比事後不可
+  稽核。**已以實測 1.2%（見上）解決結論的可稽核性**；durable 落盤（`corr_fell_back` → decisions）
+  **延到 Phase 7**（相關結構 dashboard 頁才消費，比照 vol_fell_back 當初也是 dashboard 需要才加）；
+  `DccParams.fell_back` 已是 ready-to-wire 來源。
+- **M-1** `vol_target_base.decide` SELECTION 分支 `self._cache=state` 設於相關步驟（可 raise）之前，
+  例外續跑時下個曝險檢查會踩 `filter` 的 assert（實務上首個例外即中止 run、不可達）→ 5b 順手把賦值移後。
+- **M-2** `rolling_correlation` 退役後為半死碼（僅測試引用）→ 5b/後續若不用即刪。
+- **M-3** `_estimate_every=round(refit_interval/selection_interval)` 對非整數倍以四捨五入近似 →
+  docstring 標「建議設為 selection_interval 整數倍」（現 63/21=3 乾淨，有 cadence 測試守）。
+
 ### Phase 5a 邊界
-相關模型層完整（DCC/EWMA-corr、refit/filter、config 開關、消融結論）。**5b 做 ERC 權重選項 +
-ERC vs inverse-vol 消融**（相關影響「配置」的通道，需優化器 + PSD）。
+相關模型層完整（DCC/EWMA-corr、refit/filter、config 開關、消融結論可稽核）。**5b 做 ERC 權重選項 +
+ERC vs inverse-vol 消融**（相關影響「配置」的通道，需優化器 + PSD），並順手處理 M-1~M-3。
 
 ---
 
