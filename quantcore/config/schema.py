@@ -65,7 +65,6 @@ class RiskConfig(_Strict):
     ewma_lambda: float = Field(gt=0, lt=1)  # §5.3 RiskMetrics EWMA 衰減；也是 GARCH fallback
     forecast_horizon: int = Field(gt=0)  # §1.6 Step 1 的 H，對齊 selection_interval
     garch_window: int = Field(ge=100)  # GARCH 估計滾動窗上限（交易日）；≥ GarchArch._min_obs
-    corr_window: int = Field(ge=2)  # 滾動樣本相關窗（交易日）；實務 ≫ top_k 保 R 滿秩
     dcc_refit_interval: int = Field(ge=0)  # >0=每 N 交易日重估 (a,b)；0=固定模式
     dcc_fixed_ab: tuple[float, float]  # 固定模式 (a,b)；亦為重估 fallback
     dcc_qbar_shrink: float = Field(ge=0, lt=1)  # §5.3 Q̄ 向單位對角收縮係數（可消融）

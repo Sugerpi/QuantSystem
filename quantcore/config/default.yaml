@@ -26,7 +26,6 @@ risk:                               # §1.6 / §5
   ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
   forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
   garch_window: 1000                # GARCH 估計滾動窗上限（交易日，~4 年）；界定每次 fit 成本 O(cap)
-  corr_window: 252                  # §1.6 滾動樣本相關窗（交易日）；≫ top_k 保 R 滿秩，可消融 {126,252}
   dcc_refit_interval: 63            # §5.3 每 63 交易日重估 DCC (a,b)；設 0 = 固定模式（不估）
   dcc_fixed_ab: [0.01, 0.96]        # 固定模式 (a,b)（舊系統值）；亦為重估不收斂時 fallback
   dcc_qbar_shrink: 0.10             # Q̄ 向單位對角收縮係數（小樣本病態防護，可消融）

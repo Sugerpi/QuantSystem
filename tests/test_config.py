@@ -170,11 +170,6 @@ def test_risk_garch_window_must_be_at_least_min_obs():
         make_cfg(["SPY", "TLT"], risk={"garch_window": 50})  # < 100
 
 
-def test_risk_corr_window_loaded():
-    cfg = load_config("quantcore/config/default.yaml")
-    assert cfg.risk.corr_window == 252
-
-
 def test_default_vol_model_is_garch_arch():
     cfg = load_config("quantcore/config/default.yaml")
     assert cfg.risk.vol_model == "garch_arch"
@@ -222,7 +217,6 @@ def test_dcc_fixed_ab_rejects_nonstationary():
         ewma_lambda=0.94,
         forecast_horizon=21,
         garch_window=1000,
-        corr_window=252,
         dcc_refit_interval=63,
         dcc_fixed_ab=(0.5, 0.6),
         dcc_qbar_shrink=0.10,  # a+b=1.1 ≥ 1
@@ -247,7 +241,6 @@ def test_dcc_fixed_ab_rejects_nonfinite():
         ewma_lambda=0.94,
         forecast_horizon=21,
         garch_window=1000,
-        corr_window=252,
         dcc_refit_interval=63,
         dcc_fixed_ab=(float("nan"), 0.5),
         dcc_qbar_shrink=0.10,
@@ -269,7 +262,6 @@ def test_dcc_refit_interval_zero_is_fixed_mode():
         ewma_lambda=0.94,
         forecast_horizon=21,
         garch_window=1000,
-        corr_window=252,
         dcc_refit_interval=0,
         dcc_fixed_ab=(0.01, 0.96),
         dcc_qbar_shrink=0.10,
