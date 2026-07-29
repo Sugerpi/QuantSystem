@@ -19,7 +19,7 @@
 | 3 | 訊號與組合層 | ~1 週 | ✅ 完成 |
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ✅ 完成（全 AC 達成） |
 | 5 | DCC 與 ERC | ~1 週 | ✅ 完成（5a 相關模型層 + 5b ERC，全 AC 達成）|
-| 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ⬜ 未開始 |
+| 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ✅ 完成（parity 達成；轉正刻意不做，見備忘）|
 | 7 | Dashboard 與研究報告 | ~2.5 週 | ⬜ 未開始 |
 
 **總時程**：約 3-3.5 個月業餘時間。Phase 0-2 建議暑假密集完成。
@@ -396,17 +396,57 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 
 ---
 
-## Phase 6 — 手刻 GARCH（學習里程碑）　⬜
+## Phase 6 — 手刻 GARCH（學習里程碑）　✅（parity 達成；轉正刻意不做）
 
-`garch_own.py`：t 分配 log-likelihood、變異數遞迴、數值優化、多步預測。
+`garch_own.py`：Student-t log-likelihood、變異數遞迴、L-BFGS-B 數值優化、多步解析預測。
+以學習為導向的走查式開發（非 subagent）——四零件逐一講解後手寫、以 arch 為 parity 參照。
 
 ### 任務
-- [ ] `models/volatility/garch_own.py`（手刻 GARCH(1,1)-t、L-BFGS-B）
-- [ ] parity test（vs arch，§5.2）
-- [ ] 推導筆記（技術寫作樣本）
+- [x] `models/volatility/garch_own.py`（手刻 GARCH(1,1)-t、L-BFGS-B；四零件：遞迴/likelihood/優化/多步預測）
+- [x] parity test（vs arch，§5.2；`tests/test_models/test_garch_parity.py`，本機閘門）
+- [x] 推導筆記（技術寫作樣本，使用者自備）
+- [x] CI 單元測試（`tests/test_models/test_garch_own.py`，合成資料 + 四零件純函數，快照缺席時仍守）
 
 ### AC
-- [ ] parity test 通過（參數相對誤差 <1%、21 步預測 <0.5%）→ 轉正為預設 `vol_model`
+- [x] **parity test 通過**（§5.2 標準）——快照 `2026-07-16_20ed09` 19/20 檔（HYG 退化跳過），
+      參數 (ω,α,β,ν) 最差相對誤差 **0.0284%**（門檻 1%，~35× 餘裕）、21 步年化波動預測最差 **0.0019%**
+      （門檻 0.5%，~260× 餘裕）——手刻版與 arch **數值上幾乎完全等價**。
+- [~] **轉正為預設 `vol_model`**：**刻意不做**（見下方誠實結論）。parity 已證等價，但手刻版 8.7× 慢、
+      翻預設零數值好處，故保留 `garch_arch` 為預設。AC 的可測核心（parity 正確性）達成；「轉正」為
+      規格附帶的學習/履歷 consequence，經量測後由使用者拍板不做。
+
+### Phase 6 實作備忘（與原規劃的差異）
+1. **走查式（walk-through）開發、非 subagent-driven**：本 Phase 為學習里程碑，使用者要求逐段看 code
+   如何生成。四零件（變異數遞迴 → Student-t likelihood → L-BFGS-B 目標/優化 → 解析多步預測）逐一講解、
+   手寫、組進 `GarchOwn(VolatilityModel)`。仍守 TDD：parity test 先 RED → 建檔 → 迭代到 GREEN。
+2. **parity 過程抓出兩個真 bug（TDD 的價值）**：(a) σ²_0 種子原用樣本變異數 → EEM 的 ω 差 1.795%（>1%）；
+   換成 **arch 的 backcast**（前 min(75,n) 筆殘差平方的 0.94^i 加權平均、優化前算一次固定、
+   σ²_0 = ω+(α+β)·backcast）後 ω 降到 <0.01%。(b) L-BFGS-B 預設 `gtol=1e-5` 在參數尺度橫跨兩數量級
+   （ω~0.04、β~0.9、ν~8）時，大尺度參數先收斂即過早停手，留 **ν 卡在起始值 8.0**（LQD 差 5.17%）；
+   收緊容差（`ftol=1e-12, gtol=1e-8, maxiter=1000, maxfun=20000`）逼優化到底後 ν <0.03%。
+3. **數值梯度（非解析梯度）**：依 brainstorming「先數值、之後可選深化解析」。解析梯度為當初延後的學習深度
+   加分關卡，未做——若日後要翻預設、需追速度時再補（數值梯度是 8.7× 慢的主因）。
+4. **標準化殘差用「原始 scaled return / 條件波動」**（非去均值），刻意與 `garch_arch:64`/`Ewma` 一字不差，
+   確保 Phase 5 DCC 的殘差輸入三模型間一致（契約一致 > 局部數學正確）。
+5. **平穩性（α+β<1）交給 base 事後檢查**：L-BFGS-B 只吃箱型邊界、無法表達跨參數線性不等式；箱型約束
+   α,β∈[0,1) + base 的 `enforce_stationarity` 事後擋（≥1 → GarchDegenerateError → fallback EWMA），
+   與 `garch_arch` 同模式、忠於規格「L-BFGS-B」選擇。
+6. **`garch_own` 未接進生產派發**（`fit_volatility`/`VolForecaster`）：預設是 arch、且手刻版無便宜 filter
+   路徑（arch 的 `fix()` 濾波專屬 arch）。日後若要當 live 研究選項再補 filter，屬後續工。config 的
+   `VolModel` Literal 早已含 `garch_own`（Phase 0 placeholder），設它會在 VolForecaster eager 驗證誠實 fail。
+
+### Phase 6 誠實科學結論（快照 `2026-07-16_20ed09`）
+- **parity 幾乎完美**：19 檔全參數 <0.03%、預測 <0.002%——手刻 MLE 與 arch 的 C 核心數值等價。
+- **效能量測**：手刻版 **617 ms/fit vs arch 71 ms/fit = 8.7× 慢**（純 Python 順序遞迴 + 數值梯度
+  vs arch 的編譯核心）。
+- **§5.2 結論與決策**：規格 AC 含「parity 後轉正為預設」。但翻預設換來的只是「手刻版即生產路徑」的
+  敘事，代價是**每次回測 8.7× 慢、零數值好處**（可證等價）。**使用者拍板不翻**：`garch_arch` 續為
+  生產預設（快），`garch_own` 為已 parity 驗證的替代/研究路徑 + 學習成品。學習目標（親手實作並證明
+  數值等價）已 100% 達成；「轉正」的效能稅不值得付。日後若要翻預設，先補解析梯度追回速度（見備忘 3）。
+
+### Phase 6 邊界
+手刻 GARCH 完整、parity 驗證、CI 覆蓋齊備。預設 vol 路徑不變（`garch_arch`）。可進 Phase 7（Dashboard）——
+其 GARCH 頁「手刻 vs arch parity」對照頁籤（§11.2 表列）的資料來源即本 Phase 的 parity 產物。
 
 ---
 
@@ -443,4 +483,15 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 - 2026-07-24：**Phase 4c 完成，Phase 4 全部 AC 達成**——抽 `momentum_select` 共用（消融選擇由結構保證一致）、stationary block bootstrap（配對差異檢定 full vs 消融版，seed 走 config 守 INV-6）、平均曝險、子期間分析（2005-09/2010-19/2020-）、σ*±2% 條件式量測（`vol_target_ac.py` 讀 run 產物、日層級閾值子集）、七策略消融全表 + baseline 配對 bootstrap。全套測試 300 綠（+ `requires_snapshot` 本機 AC 閘門）。以 subagent-driven TDD 執行 10 個 task。**AC 實測**：voltarget_only 全期實現波動 9.64%、full 閾值/嚴格版 9.86%（皆落 σ*=10%±2%）；七策略消融表產出。**誠實科學結論**：full 的 MaxDD −14.4%/Calmar 0.51 為全場最佳（回撤控制明顯較好），但對每個消融版的 Sharpe/Calmar 配對 bootstrap CI 皆含 0（優勢不顯著）——§6.3 明言的合格結論，波動目標層在本樣本期未證明對風險調整報酬有統計顯著貢獻。5 處規格偏離見上方 Phase 4c 備忘。**Phase 4 全部 AC 達成 ✅**，消融結果即研究報告骨架。
 - 2026-07-27：Phase 4 併回 main（remote 已由 **PR #3** 合過同分支，比照 Phase 3 對齊 origin/main、未硬推），並開 `feature/phase5-dcc-erc`。
 - 2026-07-27：**Phase 5a 相關模型層完成，5a AC 達成**——`models/correlation/`（`normalize_to_correlation` R 合法性單一出口、DCC(1,1) 兩步 QMLE、EWMA-corr 基線、`CorrelationForecaster` refit/filter 鏡射 VolForecaster）、`covariance.py` 唯一出口收斂（R 由相關層依 `corr_model` 派發、`rolling_correlation` 退役）、標準化殘差管線複用 VolForecaster、config 加 `dcc_refit_interval`/`dcc_fixed_ab`/`dcc_qbar_shrink` 並移除死參數 `corr_window`、預設 `corr_model` 翻 `ewma`。全套測試 335 綠（+ `requires_snapshot` 本機 AC 閘門 `test_phase5a_ac.py`）。以 subagent-driven TDD 執行 12 個 task，實質模組經 spec + code-quality 兩段式 review，抓修 8 項實質問題（零變異數靜默腐蝕、frozen dataclass footgun、shrink 魔術數字、DCC 靜默 fallback 無信號、`ticker_returns` RangeIndex 跨模組對齊 bug 等，見上方備忘）。**手寫 DCC 正確性以合成回收測試建立**（已知 (a,b) 於 3000 樣本回收、含高持續性 a+b=0.98 邊界 + 雙 seed，誤差 <0.005；無 arch 那樣的 parity 參照）。**AC 誠實結論**：DCC vs EWMA 消融——full 在 ewma/dcc 下 Sharpe 0.602 vs 0.591、Calmar 0.489 vs 0.486、MaxDD 全 ~−14.9%、實現波動全落 σ*±2%；配對 bootstrap（dcc−ewma）Sharpe/Calmar CI 皆含 0、點估計微偏 EWMA——**DCC 無統計顯著貢獻，v1 出貨用 EWMA（預設）、DCC 留 config/研究選項**（§5.3 明言的合格結論，與 Phase 4c 一致）。voltarget_only（K=1）三相關模型下完全相同，結構性驗證相關只在 K>1 有作用。6 處規格偏離見上方 Phase 5a 備忘。5a 完成後推 `feature/phase5-dcc-erc` 至 origin 當雲端檢查點。
+- 2026-07-29：**Phase 6 手刻 GARCH 完成（parity 達成；轉正刻意不做）**——`models/volatility/garch_own.py`
+  四零件手刻（變異數遞迴 / 標準化 Student-t log-likelihood / L-BFGS-B 數值優化 / 解析多步預測），繼承
+  `VolatilityModel` base、與 `garch_arch` 走同一份契約。以學習為導向的走查式開發（逐段講解 code 生成、
+  非 subagent），仍守 TDD（parity test 先 RED → 建檔 → 迭代 GREEN）。**parity 對 arch 幾乎完美**：快照
+  `2026-07-16_20ed09` 19/20 檔（HYG 退化跳過），參數 (ω,α,β,ν) 最差 0.0284%（門檻 1%）、21 步預測最差
+  0.0019%（門檻 0.5%）。過程中 parity 抓出兩個真 bug 並修（σ²_0 種子改用 arch backcast、ν 卡起始值改收緊
+  L-BFGS-B 容差，詳見備忘）。補 CI 單元測試 10 項（合成 + 四零件純函數，快照缺席仍守）。全套 365 綠。
+  **效能量測**：手刻版 617 ms/fit vs arch 71 ms/fit = 8.7× 慢。**§5.2 決策**：翻預設換來的只是敘事、代價
+  是每次回測 8.7× 慢且零數值好處（可證等價）——**使用者拍板不翻**，`garch_arch` 續為生產預設，`garch_own`
+  為已驗證的替代/研究路徑 + 學習成品。學習目標 100% 達成；「轉正」的效能稅不值得付（日後要翻先補解析梯度）。
+  6 處規格偏離見上方 Phase 6 備忘。**Phase 6 學習里程碑達成 ✅**。
 - 2026-07-27：**Phase 5b ERC 權重完成，Phase 5 全部 AC 達成**——`portfolio/weighting.py` 的 `erc_weights`（等風險貢獻，Spinu 循環座標下降：長單由正根結構保證、決定性、無優化器失敗模式、未收斂誠實拋錯）、獨立策略 `full_erc`（cov-first 自有 decide()，與 `full` apples-to-apples 只差權重層，不動已 5a-硬化的 inverse_vol 熱路徑）、base 純提取 `_build_cov` + `_exposure_decision` 共用 helper（行為不變、corr 每決策一次）。無新 config（ERC 求解器常數為演算法常數）。全套測試 347 綠（+ `requires_snapshot` 本機閘門 `test_phase5b_ac.py`）。以 subagent-driven TDD 執行 6 個 task，實質模組經 spec + code-quality 兩段式 review，抓修 3 項（ERC 單資產守護前置/CCD 非收斂靜默、apples-to-apples 測試 K=2 無鑑別力——**發現 K=2 時 ERC≡inverse-vol 的數學事實**、改 K≥3 並明文鎖住恆等式）。**AC 誠實結論**：ERC vs inverse-vol 消融——full（inverse-vol）Sharpe 0.602/Calmar 0.489/MaxDD −14.9% vs full_erc（ERC）0.587/0.413/−17.4%；配對 bootstrap（full−full_erc）Sharpe/Calmar CI 皆含 0、**點估計微偏 inverse-vol**——**ERC 未打敗 inverse-vol，v1 續用 inverse-vol（預設不變）、ERC 留 `full_erc` 研究/選項**（§5.3 合格結論，印證「先簡後繁是紀律」）。4 處規格偏離見上方 Phase 5b 備忘。**Phase 5 全部 AC 達成 ✅**：v1 生產路徑為 EWMA 相關 + inverse-vol 權重（兩簡單基線皆未被 DCC/ERC 打敗），DCC/ERC 保留為研究選項。
