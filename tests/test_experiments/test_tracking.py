@@ -57,6 +57,9 @@ def test_manifest_separates_identity_from_created_at(tmp_path):
             }
         ),
         decisions=pd.DataFrame(),
+        trades=pd.DataFrame(),
+        correlations=pd.DataFrame(),
+        residuals=pd.DataFrame(),
         metrics={"a": {"sharpe": 1.0}},
     )
     m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
@@ -66,6 +69,7 @@ def test_manifest_separates_identity_from_created_at(tmp_path):
         "nav.parquet",
         "weights.parquet",
         "decisions.parquet",
+        "trades.parquet",
         "metrics.json",
     }
 
@@ -100,6 +104,9 @@ def test_all_artifacts_written(tmp_path):
             }
         ),
         decisions=pd.DataFrame(),
+        trades=pd.DataFrame(),
+        correlations=pd.DataFrame(),
+        residuals=pd.DataFrame(),
         metrics={"a": {"sharpe": 1.0}},
     )
     for fn in (
@@ -108,6 +115,7 @@ def test_all_artifacts_written(tmp_path):
         "nav.parquet",
         "weights.parquet",
         "decisions.parquet",
+        "trades.parquet",
         "metrics.json",
     ):
         assert (d / fn).exists(), fn

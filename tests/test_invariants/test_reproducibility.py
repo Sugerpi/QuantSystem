@@ -20,7 +20,7 @@ from quantcore.config import load_config
 from quantcore.experiments.runner import run_experiment
 from tests.fixtures.synthetic import make_dates, make_snapshot
 
-DATA_FRAMES = ("nav.parquet", "weights.parquet", "decisions.parquet")
+DATA_FRAMES = ("nav.parquet", "weights.parquet", "decisions.parquet", "trades.parquet")
 
 
 def _cfg():
