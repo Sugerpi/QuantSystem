@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from quantcore.backtest.accounting import CASH, apply_costs, apply_returns, trade_deltas
+from quantcore.backtest.accounting import _BPS, CASH, apply_costs, apply_returns, trade_deltas
 from quantcore.backtest.clock import EventClock
 from quantcore.backtest.ptview import make_view
 from quantcore.backtest.strategy import DecisionEvent, Strategy
@@ -77,6 +77,11 @@ def run_strategy(
                 if dw == 0.0:
                     continue
                 price = float(adj.at[t, ticker])
+                if not (price > 0.0):  # NaN 或 ≤0：誠實拋錯，不靜默寫 NaN/inf shares
+                    raise ValueError(
+                        f"{t:%Y-%m-%d} {ticker} fill_price={price} 非正有限值——"
+                        "無法計算 shares（可能該檔當日缺 bar / 停牌）"
+                    )
                 notional = dw * nav_before
                 trade_rows.append(
                     {
@@ -90,7 +95,7 @@ def run_strategy(
                         "notional": notional,
                         "fill_price": price,
                         "shares": notional / price,
-                        "cost": abs(dw) * nav_before * bps / 10_000.0,
+                        "cost": abs(dw) * nav_before * bps / _BPS,
                     }
                 )
             weights = dict(pending.target)
