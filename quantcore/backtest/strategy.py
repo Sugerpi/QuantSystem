@@ -12,8 +12,10 @@ Diagnostics 不是可選的 debug 資訊，是 Decision Explorer（§11.2）的�
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+
+import pandas as pd
 
 from quantcore.backtest.ptview import PointInTimeView
 from quantcore.config import QuantConfig
@@ -44,6 +46,10 @@ class Diagnostics:
     garch_params: dict[str, dict[str, float] | None] | None = (
         None  # 每檔 {omega,alpha,beta,nu}；EWMA/None
     )
+    # corr_matrix 為 pd.DataFrame：compare=False 讓 frozen dataclass 的 __eq__/__hash__ 不碰它
+    # （DataFrame 真值歧義 + unhashable，比照 Phase 5a DccParams 的 eq=False 處置）。
+    corr_matrix: pd.DataFrame | None = field(default=None, compare=False, repr=False)
+    corr_fell_back: bool | None = None  # DCC (a,b) 是否退回 fixed_ab（鏡射 vol_fell_back）
 
 
 @dataclass(frozen=True)

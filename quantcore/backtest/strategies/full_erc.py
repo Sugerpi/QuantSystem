@@ -38,7 +38,7 @@ class FullErc(VolTargetStrategy):
             sigma_hat, garch_params, fell_back = forecast_selected(
                 self._forecaster, view, sel.selected
             )
-            cov = self._build_cov(view, sel.selected, sigma_hat, event)
+            cov, R = self._build_cov(view, sel.selected, sigma_hat, event)
             w_risky = erc_weights(cov)  # ← 與 full 唯一差異（full 用 inverse_vol(sigma_hat)）
             state = RiskyState(
                 eligible=sel.eligible,
@@ -57,6 +57,6 @@ class FullErc(VolTargetStrategy):
                 return None
             assert self._e_current is not None
             state = self._refilter(view, self._cache)  # 更新 σ̂，沿用快取 ERC 權重
-            cov = self._build_cov(view, state.selected, state.sigma_hat, event)
+            cov, R = self._build_cov(view, state.selected, state.sigma_hat, event)
             e_current = self._e_current
-        return self._exposure_decision(state, cov, e_current)
+        return self._exposure_decision(state, cov, R, e_current)
