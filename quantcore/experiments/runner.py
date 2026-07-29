@@ -20,6 +20,7 @@ from quantcore.backtest.clock import EventClock
 from quantcore.backtest.engine import run_strategy
 from quantcore.backtest.metrics import compute_metrics, subperiod_metrics
 from quantcore.backtest.strategies import STRATEGIES
+from quantcore.backtest.strategies.vol_target_base import VolTargetStrategy
 from quantcore.config import QuantConfig, load_config
 from quantcore.data.hashing import config_hash
 from quantcore.data.snapshot import load_snapshot
@@ -58,6 +59,7 @@ def _diagnostics_row(diag) -> dict:
         "band_blocked": diag.band_blocked,
         "vol_fell_back": j(diag.vol_fell_back),
         "garch_params": j(diag.garch_params),
+        "corr_fell_back": diag.corr_fell_back,
     }
 
 
@@ -80,7 +82,51 @@ def _flatten_decisions(raw: pd.DataFrame) -> pd.DataFrame:
     out["exposure_raw"] = out["exposure_raw"].astype("float64")
     out["exposure_applied"] = out["exposure_applied"].astype("float64")
     out["band_blocked"] = out["band_blocked"].astype("boolean")
+    out["corr_fell_back"] = out["corr_fell_back"].astype("boolean")
     return out
+
+
+def _flatten_correlations(raw: pd.DataFrame) -> pd.DataFrame:
+    """每決策的 corr_matrix → 長格式（decision_date, strategy_id, ticker_i, ticker_j, corr）。
+
+    只有算 R 的策略（full/full_erc）有；K=1（voltarget_only）或無矩陣者跳過。
+    """
+    if raw.empty:
+        return pd.DataFrame()
+    rows = []
+    for r in raw.to_dict("records"):
+        rmat = r["diagnostics"].corr_matrix
+        if rmat is None or rmat.shape[0] < 2:
+            continue
+        tickers = list(rmat.index)
+        for ti in tickers:
+            for tj in tickers:
+                rows.append(
+                    {
+                        "decision_date": r["decision_date"],
+                        "strategy_id": r["strategy_id"],
+                        "ticker_i": ti,
+                        "ticker_j": tj,
+                        "corr": float(rmat.at[ti, tj]),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def _residuals_frame(strategy_id: str, resid: dict) -> pd.DataFrame:
+    """各檔最後一次標準化殘差 → 長格式（strategy_id, ticker, date, std_resid）。"""
+    rows = []
+    for ticker, s in resid.items():
+        for date, val in s.items():
+            rows.append(
+                {
+                    "strategy_id": strategy_id,
+                    "ticker": ticker,
+                    "date": date,
+                    "std_resid": float(val),
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def run_experiment(
@@ -104,12 +150,16 @@ def run_experiment(
         exposure_check_interval=cfg.schedule.exposure_check_interval,
     )
 
-    navs, weights, decisions, metrics = [], [], [], {}
+    navs, weights, decisions, trades, correlations, residuals, metrics = [], [], [], [], [], [], {}
     for s in strategies:
         nav_df, w_df, d_df, t_df = run_strategy(snapshot, clock, s, cfg)
         navs.append(nav_df)
         weights.append(w_df)
         decisions.append(_flatten_decisions(d_df))
+        trades.append(t_df)
+        correlations.append(_flatten_correlations(d_df))
+        if isinstance(s, VolTargetStrategy):
+            residuals.append(_residuals_frame(s.strategy_id, s.standardized_residuals()))
 
         rate = (
             snapshot["rates"].set_index("date")["DTB3"].reindex(nav_df["date"]).ffill().bfill()
@@ -146,6 +196,15 @@ def run_experiment(
         weights=pd.concat(weights, ignore_index=True),
         decisions=pd.concat(decisions, ignore_index=True)
         if any(len(d) for d in decisions)
+        else pd.DataFrame(),
+        trades=pd.concat(trades, ignore_index=True)
+        if any(len(t) for t in trades)
+        else pd.DataFrame(),
+        correlations=pd.concat(correlations, ignore_index=True)
+        if any(len(c) for c in correlations)
+        else pd.DataFrame(),
+        residuals=pd.concat(residuals, ignore_index=True)
+        if any(len(x) for x in residuals)
         else pd.DataFrame(),
         metrics=metrics,
     )
