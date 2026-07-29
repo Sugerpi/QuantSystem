@@ -132,7 +132,7 @@ def _run(target, warmup=2):
         selection_interval=cfg.schedule.selection_interval,
         exposure_check_interval=cfg.schedule.exposure_check_interval,
     )
-    nav, weights, decisions = run_strategy(snap, clock, _FixedTarget(cfg, target), cfg)
+    nav, weights, decisions, _tr = run_strategy(snap, clock, _FixedTarget(cfg, target), cfg)
     return nav, weights, decisions, clock
 
 

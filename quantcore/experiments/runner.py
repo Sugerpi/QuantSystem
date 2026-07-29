@@ -106,7 +106,7 @@ def run_experiment(
 
     navs, weights, decisions, metrics = [], [], [], {}
     for s in strategies:
-        nav_df, w_df, d_df = run_strategy(snapshot, clock, s, cfg)
+        nav_df, w_df, d_df, t_df = run_strategy(snapshot, clock, s, cfg)
         navs.append(nav_df)
         weights.append(w_df)
         decisions.append(_flatten_decisions(d_df))
