@@ -193,3 +193,7 @@ class VolTargetStrategy(Strategy):
             diagnostics=diag,
             execute=not exp.band_blocked,
         )
+
+    def standardized_residuals(self) -> dict[str, pd.Series]:
+        """各檔最後一次 refit/filter 的標準化殘差（runner 於 run 結束落盤 residuals.parquet）。"""
+        return self._forecaster.all_standardized_residuals()

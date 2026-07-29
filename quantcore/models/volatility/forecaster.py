@@ -90,3 +90,10 @@ class VolForecaster:
     def last_standardized_residuals(self, ticker: str) -> pd.Series:
         """該 ticker 上次 refit/filter 的標準化殘差序列（供 CorrelationForecaster）。"""
         return self._resid[ticker]
+
+    def all_standardized_residuals(self) -> dict[str, pd.Series]:
+        """所有曾 refit/filter 過的 ticker → 最後一次標準化殘差序列。
+
+        供 run 結束時落盤 model_details/residuals.parquet（頁 3 QQ/ACF）。回淺拷貝。
+        """
+        return dict(self._resid)
