@@ -117,7 +117,7 @@ def _residuals_frame(strategy_id: str, resid: dict) -> pd.DataFrame:
     """各檔最後一次標準化殘差 → 長格式（strategy_id, ticker, date, std_resid）。"""
     rows = []
     for ticker, s in resid.items():
-        for date, val in s.items():
+        for date, val in s.sort_index().items():
             rows.append(
                 {
                     "strategy_id": strategy_id,

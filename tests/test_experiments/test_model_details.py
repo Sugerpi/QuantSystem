@@ -56,6 +56,7 @@ def test_run_emits_trades_and_model_details(tmp_path):
 
     resid = pd.read_parquet(d / "model_details" / "residuals.parquet")
     assert {"strategy_id", "ticker", "date", "std_resid"} <= set(resid.columns)
+    assert "bh_spy" not in resid["strategy_id"].unique()
 
     dec = pd.read_parquet(d / "decisions.parquet")
     assert "corr_fell_back" in dec.columns

@@ -119,3 +119,4 @@ def test_all_artifacts_written(tmp_path):
         "metrics.json",
     ):
         assert (d / fn).exists(), fn
+    assert not (d / "model_details").exists()

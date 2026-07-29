@@ -100,7 +100,7 @@ corr_fell_back: bool | None = None        # DCC (a,b) QMLE 是否退回 fixed_ab
 
 ### 3.4 `model_details/residuals.parquet`
 
-- 格式：`ticker, date, std_resid`。
+- 格式：`strategy_id, ticker, date, std_resid`（run 內可能含多個波動目標策略如 full、full_erc，同一 ticker 的殘差須以 strategy_id 區分）。
 - **粒度定案**：run 結束時，每檔資產寫其**最後一次 GARCH refit** 的標準化殘差時間序列（靜態 per-asset 診斷，QQ/ACF 一份即足；不逐 refit 存，避免檔案膨脹 = YAGNI）。
 - 由 runner 於 run 結束時從 forecaster 最終狀態取（引擎端，可 import 模型層）。頁 3 QQ/ACF 來源。
 
