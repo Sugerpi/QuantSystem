@@ -30,6 +30,10 @@ __all__ = [
     "load_snapshot_metadata",
     "load_snapshot_manifest",
     "list_runs",
+    "load_comparison",
+    "load_bootstrap",
+    "load_vol_eval",
+    "snapshot_dir_for_run",
 ]
 
 _JSON_COLS = (
@@ -155,6 +159,29 @@ def list_runs(runs_root: str | Path) -> list[dict]:
             }
         )
     return out
+
+
+def load_comparison(run_dir: str | Path) -> pd.DataFrame | None:
+    """ablation comparison.parquet（cell_label×strategy×指標）。缺 → None。"""
+    p = Path(run_dir) / "comparison.parquet"
+    return pd.read_parquet(p) if p.exists() else None
+
+
+def load_bootstrap(run_dir: str | Path) -> pd.DataFrame | None:
+    """ablation bootstrap.parquet（vs/metric/point/lo/hi/excludes_zero）。缺 → None。"""
+    p = Path(run_dir) / "bootstrap.parquet"
+    return pd.read_parquet(p) if p.exists() else None
+
+
+def load_vol_eval(vol_eval_dir: str | Path) -> pd.DataFrame | None:
+    """vol_eval_comparison.parquet（ticker×spec 的 qlike/mz_r2）。缺 → None。"""
+    p = Path(vol_eval_dir) / "vol_eval_comparison.parquet"
+    return pd.read_parquet(p) if p.exists() else None
+
+
+def snapshot_dir_for_run(run_dir: str | Path) -> Path:
+    """該 run 的 config.yaml 記錄的快照目錄（供頁 7/9 讀快照）。"""
+    return Path(load_run_config(run_dir)["snapshot"])
 
 
 @dataclass(frozen=True)

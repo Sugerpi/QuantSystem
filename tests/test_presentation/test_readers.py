@@ -105,3 +105,18 @@ def test_list_runs_manifest_without_metrics_gives_empty_strategies(tmp_path):
     entry = next(r for r in runs if r["name"] == "run_x")
     assert entry["strategies"] == []
     assert entry["snapshot_id"] == "s1"
+
+
+def test_load_comparison_bootstrap_absent_returns_none(tmp_path):
+    assert readers.load_comparison(tmp_path) is None
+    assert readers.load_bootstrap(tmp_path) is None
+    assert readers.load_vol_eval(tmp_path) is None
+
+
+def test_snapshot_dir_for_run(run_dir):
+    from pathlib import Path
+
+    cfg = readers.load_run_config(run_dir)
+    got = readers.snapshot_dir_for_run(run_dir)
+    assert isinstance(got, Path)
+    assert str(got) == cfg["snapshot"]
