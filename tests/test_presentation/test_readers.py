@@ -119,4 +119,4 @@ def test_snapshot_dir_for_run(run_dir):
     cfg = readers.load_run_config(run_dir)
     got = readers.snapshot_dir_for_run(run_dir)
     assert isinstance(got, Path)
-    assert str(got) == cfg["snapshot"]
+    assert got == Path(cfg["snapshot"])  # Path==Path 跨平台一致（str(Path) 在 Windows 為反斜線）
