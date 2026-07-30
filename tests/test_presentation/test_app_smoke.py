@@ -61,3 +61,19 @@ def test_run_lab_stub(runs_root, run_dir):
     at.run()
     assert not at.exception
     assert any("7b" in m.value or "Phase 7b" in m.value for m in list(at.info) + list(at.markdown))
+
+
+def test_garch_page_renders(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/3_GARCH.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name, strategy="full")
+    at.run()
+    assert not at.exception
+    assert any("GARCH" in t.value or "波動" in t.value for t in at.title)
+
+
+def test_correlation_page_renders(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/4_Correlation.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name, strategy="full")
+    at.run()
+    assert not at.exception
+    assert any("相關" in s.value for s in at.subheader)
