@@ -26,6 +26,9 @@ __all__ = [
     "load_correlation",
     "load_residuals",
     "correlation_matrix_at",
+    "load_adj_close_panel",
+    "load_snapshot_metadata",
+    "load_snapshot_manifest",
 ]
 
 _JSON_COLS = (
@@ -108,6 +111,24 @@ def correlation_matrix_at(corr: pd.DataFrame, strategy_id: str, decision_date) -
     ddate = pd.Timestamp(decision_date)
     sub = corr[(corr["strategy_id"] == strategy_id) & (corr["decision_date"] == ddate)]
     return sub.pivot(index="ticker_i", columns="ticker_j", values="corr")
+
+
+def load_adj_close_panel(snapshot_dir: str | Path) -> pd.DataFrame:
+    """快照 prices.parquet → date×ticker 的 adj_close 面板（頁 9 價格折線）。"""
+    prices = pd.read_parquet(Path(snapshot_dir) / "prices.parquet")
+    panel = prices.pivot(index="date", columns="ticker", values="adj_close").sort_index()
+    panel.index.name = "date"
+    return panel
+
+
+def load_snapshot_metadata(snapshot_dir: str | Path) -> dict:
+    """快照 metadata.json（overrides 裁決、跨源差異；頁 7）。"""
+    return json.loads((Path(snapshot_dir) / "metadata.json").read_text(encoding="utf-8"))
+
+
+def load_snapshot_manifest(snapshot_dir: str | Path) -> dict:
+    """快照 MANIFEST.json（頁 7）。"""
+    return json.loads((Path(snapshot_dir) / "MANIFEST.json").read_text(encoding="utf-8"))
 
 
 @dataclass(frozen=True)
