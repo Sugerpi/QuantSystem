@@ -44,3 +44,9 @@ def run_dir(tmp_path_factory):
         strategy_ids=["bh_spy", "full"],
         now=pd.Timestamp("2026-07-30T10:00:00"),
     )
+
+
+@pytest.fixture(scope="session")
+def runs_root(run_dir):
+    """run_dir 的父目錄——作為 dashboard 的 runs 根（含一個合成 run）。"""
+    return run_dir.parent
