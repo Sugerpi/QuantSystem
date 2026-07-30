@@ -29,6 +29,7 @@ __all__ = [
     "load_adj_close_panel",
     "load_snapshot_metadata",
     "load_snapshot_manifest",
+    "list_runs",
 ]
 
 _JSON_COLS = (
@@ -129,6 +130,31 @@ def load_snapshot_metadata(snapshot_dir: str | Path) -> dict:
 def load_snapshot_manifest(snapshot_dir: str | Path) -> dict:
     """快照 MANIFEST.json（頁 7）。"""
     return json.loads((Path(snapshot_dir) / "MANIFEST.json").read_text(encoding="utf-8"))
+
+
+def list_runs(runs_root: str | Path) -> list[dict]:
+    """掃 runs_root 下含 manifest.json 的 run 目錄，回 [{name, path, created_at, snapshot_id,
+    git_commit, strategies}]，供全域控制列 run 選擇器。非 run 目錄（無 manifest）略過。"""
+    root = Path(runs_root)
+    out = []
+    for d in sorted(root.iterdir()):
+        mf = d / "manifest.json"
+        if not (d.is_dir() and mf.exists()):
+            continue
+        manifest = json.loads(mf.read_text(encoding="utf-8"))
+        ident = manifest.get("identity", {})
+        metrics = load_metrics(d) if (d / "metrics.json").exists() else {}
+        out.append(
+            {
+                "name": d.name,
+                "path": str(d),
+                "created_at": manifest.get("created_at"),
+                "snapshot_id": ident.get("snapshot_id"),
+                "git_commit": ident.get("git_commit"),
+                "strategies": sorted(metrics.keys()),
+            }
+        )
+    return out
 
 
 @dataclass(frozen=True)

@@ -67,3 +67,18 @@ def test_correlation_matrix_at_reshapes_long_to_square(run_dir):
     mat = readers.correlation_matrix_at(corr, "full", d0)
     assert mat.index.tolist() == mat.columns.tolist()  # 方陣、對稱標籤
     assert (mat.values.diagonal() == 1.0).all() or abs(mat.values.diagonal() - 1.0).max() < 1e-9
+
+
+def test_list_runs_discovers_and_reads_identity(run_dir):
+    runs_root = run_dir.parent
+    runs = readers.list_runs(runs_root)
+    names = [r["name"] for r in runs]
+    assert run_dir.name in names
+    entry = next(r for r in runs if r["name"] == run_dir.name)
+    assert "created_at" in entry and "snapshot_id" in entry and "strategies" in entry
+    assert "full" in entry["strategies"]
+
+
+def test_list_runs_skips_non_run_dirs(tmp_path):
+    (tmp_path / "not_a_run").mkdir()
+    assert readers.list_runs(tmp_path) == []
