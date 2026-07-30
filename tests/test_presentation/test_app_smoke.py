@@ -84,3 +84,10 @@ def test_ablation_page_graceful(runs_root, run_dir):
     _seed(at, runs_root, run_dir.name)
     at.run()
     assert not at.exception  # 合成 run 無 comparison → 優雅提示，不崩潰
+
+
+def test_data_quality_page(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/7_Data_Quality.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name)
+    at.run()
+    assert not at.exception
