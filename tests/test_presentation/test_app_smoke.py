@@ -53,3 +53,11 @@ def test_portfolio_cost_renders(runs_root, run_dir):
     assert not at.exception
     text = " ".join(s.value for s in at.subheader)
     assert "權重" in text and "成本" in text
+
+
+def test_run_lab_stub(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/8_Run_Lab.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name)
+    at.run()
+    assert not at.exception
+    assert any("7b" in m.value or "Phase 7b" in m.value for m in list(at.info) + list(at.markdown))
