@@ -188,6 +188,11 @@ def decision_layers(run_dir: str | Path, strategy_id: str, decision_date) -> Dec
     m = (dec["strategy_id"] == strategy_id) & (dec["decision_date"] == ddate)
     if not m.any():
         return None
+    if int(m.sum()) > 1:
+        raise ValueError(
+            f"decisions.parquet 對 ({strategy_id}, {ddate}) 有 {int(m.sum())} 列——"
+            "(strategy_id, decision_date) 應唯一"
+        )
     r = dec[m].iloc[0]
 
     def f(v):

@@ -47,6 +47,33 @@ def test_decision_layers_missing_returns_none(run_dir):
     assert readers.decision_layers(run_dir, "full", pd.Timestamp("1990-01-01")) is None
 
 
+def test_decision_layers_raises_on_duplicate_rows(tmp_path):
+    """(strategy_id, decision_date) 理應唯一；出現重複列須 fail loud 而非靜默取第一列。"""
+    ddate = pd.Timestamp("2020-01-02")
+    row = {
+        "strategy_id": "full",
+        "decision_date": ddate,
+        "execution_date": pd.NaT,
+        "event": "selection",
+        "eligible": json.dumps(["SPY"]),
+        "momentum_scores": json.dumps({"SPY": 0.1}),
+        "selected": json.dumps(["SPY"]),
+        "absmom": json.dumps({"SPY": True}),
+        "sigma_hat": json.dumps({"SPY": 0.2}),
+        "w_risky": json.dumps({"SPY": 1.0}),
+        "sigma_p": 0.2,
+        "exposure_raw": 1.0,
+        "exposure_applied": 1.0,
+        "band_blocked": False,
+        "target_weights": json.dumps({"SPY": 1.0, "CASH": 0.0}),
+    }
+    dec = pd.DataFrame([row, row])
+    dec.to_parquet(tmp_path / "decisions.parquet")
+
+    with pytest.raises(ValueError, match="有 2 列"):
+        readers.decision_layers(tmp_path, "full", ddate)
+
+
 def test_decision_layers_null_path_execution_date(run_dir):
     """band_blocked=True 的曝險檢查列（僅記錄、未執行）：execution_date 應為 None。"""
     dec = pd.read_parquet(run_dir / "decisions.parquet")

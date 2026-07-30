@@ -15,38 +15,54 @@ _FORBIDDEN_PREFIXES = (
 )
 
 
-def _imported_modules(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+def _imported_modules(source: str) -> set[str]:
+    """收集一段原始碼所有被 import 的模組全名。
+
+    ImportFrom 除了 module 本身，也展開 `from PKG import NAME` 為 `PKG.NAME`——
+    否則 `from quantcore import backtest`（module='quantcore'）會漏掉 quantcore.backtest。
+    """
+    tree = ast.parse(source)
     mods: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             mods.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             mods.add(node.module)
+            mods.update(f"{node.module}.{a.name}" for a in node.names)
     return mods
 
 
-def _all_py() -> list[Path]:
-    return [p for p in _PRESENTATION.rglob("*.py")]
+def _engine_offenders(source: str) -> set[str]:
+    """回傳 source 中違規（import 引擎模組）的模組全名集合。"""
+    return {
+        m
+        for m in _imported_modules(source)
+        if any(m == pre or m.startswith(pre + ".") for pre in _FORBIDDEN_PREFIXES)
+    }
 
 
 def test_presentation_never_imports_engine():
     offenders = {}
-    for path in _all_py():
-        bad = {
-            m
-            for m in _imported_modules(path)
-            if any(m == pre or m.startswith(pre + ".") for pre in _FORBIDDEN_PREFIXES)
-        }
+    for path in _PRESENTATION.rglob("*.py"):
+        bad = _engine_offenders(path.read_text(encoding="utf-8"))
         if bad:
             offenders[str(path.relative_to(_PRESENTATION))] = sorted(bad)
     assert not offenders, f"presentation 違規 import 引擎：{offenders}"
 
 
-def test_guard_has_teeth():
-    """對一段含違規 import 的合成程式碼，守護邏輯必須抓到（否則守護是空殼）。"""
-    import ast as _ast
-
+def test_guard_has_teeth_direct_import():
+    """守護必須抓到 `from quantcore.backtest.engine import ...` —— 走真實偵測碼。"""
     src = "from quantcore.backtest.engine import run_strategy\n"
-    mods = {n.module for n in _ast.walk(_ast.parse(src)) if isinstance(n, _ast.ImportFrom)}
-    assert any(m.startswith("quantcore.backtest") for m in mods)
+    assert "quantcore.backtest.engine" in _engine_offenders(src)
+
+
+def test_guard_has_teeth_submodule_import():
+    """守護必須抓到 `from quantcore import backtest`（曾漏掉的 bypass）—— 走真實偵測碼。"""
+    src = "from quantcore import backtest\n"
+    assert "quantcore.backtest" in _engine_offenders(src)
+
+
+def test_guard_allows_stdlib_and_pandas():
+    """合法 import 不得被誤判。"""
+    src = "import json\nimport pandas as pd\nfrom pathlib import Path\n"
+    assert _engine_offenders(src) == set()
