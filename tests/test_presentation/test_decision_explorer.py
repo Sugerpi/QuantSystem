@@ -3,6 +3,7 @@
 import json
 
 import pandas as pd
+import pytest
 
 from quantcore.presentation import readers
 
@@ -21,6 +22,10 @@ def test_six_layers_match_raw_decisions(run_dir):
     layers = readers.decision_layers(run_dir, sid, ddate)
     raw = _raw_row(run_dir, sid, ddate)
 
+    # 非六層欄位：execution_date、event 也交叉核對
+    assert raw["execution_date"] is not pd.NaT  # 挑到的列須有真實執行日，null 路徑另有專測
+    assert layers.execution_date == pd.Timestamp(raw["execution_date"])
+    assert layers.event == raw["event"]
     # (a) eligible  (b) momentum_scores + selected  (c) absmom
     assert layers.eligible == json.loads(raw["eligible"])
     assert layers.momentum_scores == json.loads(raw["momentum_scores"])
@@ -40,3 +45,17 @@ def test_six_layers_match_raw_decisions(run_dir):
 
 def test_decision_layers_missing_returns_none(run_dir):
     assert readers.decision_layers(run_dir, "full", pd.Timestamp("1990-01-01")) is None
+
+
+def test_decision_layers_null_path_execution_date(run_dir):
+    """band_blocked=True 的曝險檢查列（僅記錄、未執行）：execution_date 應為 None。"""
+    dec = pd.read_parquet(run_dir / "decisions.parquet")
+    blocked = dec[dec["band_blocked"] == True]  # noqa: E712
+    if blocked.empty:
+        pytest.skip("fixture 未觸發任何 band_blocked 列（80 天合成資料未產生曝險攔截）")
+
+    row = blocked.iloc[0]
+    layers = readers.decision_layers(run_dir, row["strategy_id"], row["decision_date"])
+
+    assert layers.execution_date is None
+    assert layers.band_blocked is True
