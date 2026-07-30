@@ -44,7 +44,13 @@ def render_sidebar() -> None:
         return
     names = [r["name"] for r in runs]
     default = st.session_state.get("selected_runs") or names[-1:]
-    st.sidebar.multiselect("Run（可多選比較）", names, default=default, key="selected_runs")
+    st.sidebar.multiselect(
+        "Run",
+        names,
+        default=default,
+        key="selected_runs",
+        help="目前各頁顯示第一個選中的 run；多 run 疊圖比較於後續增量（計畫 2b-2/後續）。",
+    )
 
     strat_union = sorted(
         {s for r in runs if r["name"] in selected_runs(st.session_state) for s in r["strategies"]}
