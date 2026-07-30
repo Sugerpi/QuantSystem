@@ -91,3 +91,11 @@ def test_data_quality_page(runs_root, run_dir):
     _seed(at, runs_root, run_dir.name)
     at.run()
     assert not at.exception
+
+
+def test_price_trades_page(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/9_Price_Trades.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name, strategy="full")
+    at.run()
+    assert not at.exception
+    assert any("交易" in s.value or "價格" in s.value for s in at.subheader)
