@@ -44,3 +44,12 @@ def test_decision_explorer_renders_six_layers(runs_root, run_dir):
     text = " ".join(m.value for m in at.markdown) + " ".join(s.value for s in at.subheader)
     for layer in ("合格選單", "動量分數", "絕對動量", "波動", "曝險", "目標權重"):
         assert layer in text
+
+
+def test_portfolio_cost_renders(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/5_Portfolio_Cost.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name, strategy="full")
+    at.run()
+    assert not at.exception
+    text = " ".join(s.value for s in at.subheader)
+    assert "權重" in text and "成本" in text
