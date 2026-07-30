@@ -7,6 +7,7 @@ presentation 永不 import 引擎：只讀 runs/、snapshots/ 的 parquet/JSON�
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,8 @@ __all__ = [
     "load_manifest",
     "load_run_config",
     "load_decisions",
+    "DecisionLayers",
+    "decision_layers",
 ]
 
 _JSON_COLS = (
@@ -83,3 +86,61 @@ def load_decisions(run_dir: str | Path) -> pd.DataFrame:
         if c in dec.columns:
             dec[c] = dec[c].map(_parse_json_cell)
     return dec
+
+
+@dataclass(frozen=True)
+class DecisionLayers:
+    """Decision Explorer 六層（§11.2 頁 2；§2 對照表）。純資料，供頁面渲染。"""
+
+    strategy_id: str
+    decision_date: pd.Timestamp
+    execution_date: pd.Timestamp | None
+    event: str
+    eligible: list[str]  # (a)
+    momentum_scores: dict[str, float] | None  # (b)
+    selected: list[str]  # (b) 前 K
+    absmom: dict[str, bool] | None  # (c)
+    sigma_hat: dict[str, float] | None  # (d) 年化純量
+    w_risky: dict[str, float] | None  # (e)
+    sigma_p: float | None  # (e)
+    exposure_raw: float | None  # (e)
+    exposure_applied: float | None  # (e)
+    band_blocked: bool | None  # (e)
+    target_weights: dict[str, float]  # (f) 含 CASH
+
+
+def decision_layers(run_dir: str | Path, strategy_id: str, decision_date) -> DecisionLayers | None:
+    """抽取某策略某決策日的六層。查無回 None。
+
+    這是 AC① 的自動化出口：頁面渲染此結構，人工手查（Plan 2b）比對 decisions.parquet。
+    """
+    dec = load_decisions(run_dir)
+    ddate = pd.Timestamp(decision_date)
+    m = (dec["strategy_id"] == strategy_id) & (dec["decision_date"] == ddate)
+    if not m.any():
+        return None
+    r = dec[m].iloc[0]
+
+    def f(v):
+        return None if pd.isna(v) else float(v)
+
+    def b(v):
+        return None if pd.isna(v) else bool(v)
+
+    return DecisionLayers(
+        strategy_id=strategy_id,
+        decision_date=ddate,
+        execution_date=None if pd.isna(r["execution_date"]) else r["execution_date"],
+        event=r["event"],
+        eligible=r["eligible"],
+        momentum_scores=r["momentum_scores"],
+        selected=r["selected"],
+        absmom=r["absmom"],
+        sigma_hat=r["sigma_hat"],
+        w_risky=r["w_risky"],
+        sigma_p=f(r["sigma_p"]),
+        exposure_raw=f(r["exposure_raw"]),
+        exposure_applied=f(r["exposure_applied"]),
+        band_blocked=b(r["band_blocked"]),
+        target_weights=r["target_weights"],
+    )
