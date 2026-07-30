@@ -44,3 +44,26 @@ def test_load_decisions_parses_json_columns(run_dir):
     # nullable boolean 保持
     assert dec["band_blocked"].dtype.name == "boolean"
     assert "corr_fell_back" in dec.columns
+
+
+def test_load_correlation_and_residuals(run_dir):
+    corr = readers.load_correlation(run_dir)
+    assert corr is not None
+    assert {"decision_date", "strategy_id", "ticker_i", "ticker_j", "corr"} <= set(corr.columns)
+    assert set(corr["strategy_id"].unique()) <= {"full", "full_erc"}
+    resid = readers.load_residuals(run_dir)
+    assert resid is not None
+    assert {"strategy_id", "ticker", "date", "std_resid"} <= set(resid.columns)
+
+
+def test_model_details_absent_returns_none(tmp_path):
+    assert readers.load_correlation(tmp_path) is None
+    assert readers.load_residuals(tmp_path) is None
+
+
+def test_correlation_matrix_at_reshapes_long_to_square(run_dir):
+    corr = readers.load_correlation(run_dir)
+    d0 = corr["decision_date"].iloc[0]
+    mat = readers.correlation_matrix_at(corr, "full", d0)
+    assert mat.index.tolist() == mat.columns.tolist()  # 方陣、對稱標籤
+    assert (mat.values.diagonal() == 1.0).all() or abs(mat.values.diagonal() - 1.0).max() < 1e-9

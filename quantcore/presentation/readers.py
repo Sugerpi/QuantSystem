@@ -23,6 +23,9 @@ __all__ = [
     "load_decisions",
     "DecisionLayers",
     "decision_layers",
+    "load_correlation",
+    "load_residuals",
+    "correlation_matrix_at",
 ]
 
 _JSON_COLS = (
@@ -86,6 +89,25 @@ def load_decisions(run_dir: str | Path) -> pd.DataFrame:
         if c in dec.columns:
             dec[c] = dec[c].map(_parse_json_cell)
     return dec
+
+
+def load_correlation(run_dir: str | Path) -> pd.DataFrame | None:
+    """model_details/correlation.parquet（長格式）。缺 → None（本次未儲存）。"""
+    p = Path(run_dir) / "model_details" / "correlation.parquet"
+    return pd.read_parquet(p) if p.exists() else None
+
+
+def load_residuals(run_dir: str | Path) -> pd.DataFrame | None:
+    """model_details/residuals.parquet。缺 → None。"""
+    p = Path(run_dir) / "model_details" / "residuals.parquet"
+    return pd.read_parquet(p) if p.exists() else None
+
+
+def correlation_matrix_at(corr: pd.DataFrame, strategy_id: str, decision_date) -> pd.DataFrame:
+    """長格式 → 某策略某決策日的方陣相關矩陣（頁 4 熱圖）。"""
+    ddate = pd.Timestamp(decision_date)
+    sub = corr[(corr["strategy_id"] == strategy_id) & (corr["decision_date"] == ddate)]
+    return sub.pivot(index="ticker_i", columns="ticker_j", values="corr")
 
 
 @dataclass(frozen=True)
