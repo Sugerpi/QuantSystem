@@ -77,3 +77,10 @@ def test_correlation_page_renders(runs_root, run_dir):
     at.run()
     assert not at.exception
     assert any("相關" in s.value for s in at.subheader)
+
+
+def test_ablation_page_graceful(runs_root, run_dir):
+    at = AppTest.from_file("quantcore/presentation/pages/6_Ablation.py", default_timeout=30)
+    _seed(at, runs_root, run_dir.name)
+    at.run()
+    assert not at.exception  # 合成 run 無 comparison → 優雅提示，不崩潰
