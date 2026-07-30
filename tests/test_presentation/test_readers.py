@@ -82,3 +82,26 @@ def test_list_runs_discovers_and_reads_identity(run_dir):
 def test_list_runs_skips_non_run_dirs(tmp_path):
     (tmp_path / "not_a_run").mkdir()
     assert readers.list_runs(tmp_path) == []
+
+
+def test_correlation_matrix_at_empty_when_no_rows(run_dir):
+    corr = readers.load_correlation(run_dir)
+    import pandas as pd
+
+    mat = readers.correlation_matrix_at(corr, "full", pd.Timestamp("1990-01-01"))
+    assert mat.empty
+
+
+def test_list_runs_manifest_without_metrics_gives_empty_strategies(tmp_path):
+    import json
+
+    d = tmp_path / "run_x"
+    d.mkdir()
+    (d / "manifest.json").write_text(
+        json.dumps({"identity": {"snapshot_id": "s1", "git_commit": "abc"}, "created_at": "t"}),
+        encoding="utf-8",
+    )
+    runs = readers.list_runs(tmp_path)
+    entry = next(r for r in runs if r["name"] == "run_x")
+    assert entry["strategies"] == []
+    assert entry["snapshot_id"] == "s1"

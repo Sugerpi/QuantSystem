@@ -141,7 +141,7 @@ def list_runs(runs_root: str | Path) -> list[dict]:
         mf = d / "manifest.json"
         if not (d.is_dir() and mf.exists()):
             continue
-        manifest = json.loads(mf.read_text(encoding="utf-8"))
+        manifest = load_manifest(d)
         ident = manifest.get("identity", {})
         metrics = load_metrics(d) if (d / "metrics.json").exists() else {}
         out.append(
