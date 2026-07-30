@@ -19,7 +19,20 @@ __all__ = [
     "load_metrics",
     "load_manifest",
     "load_run_config",
+    "load_decisions",
 ]
+
+_JSON_COLS = (
+    "target_weights",
+    "eligible",
+    "selected",
+    "momentum_scores",
+    "absmom",
+    "sigma_hat",
+    "w_risky",
+    "vol_fell_back",
+    "garch_params",
+)
 
 
 def load_nav(run_dir: str | Path) -> pd.DataFrame:
@@ -51,3 +64,22 @@ def load_manifest(run_dir: str | Path) -> dict:
 def load_run_config(run_dir: str | Path) -> dict:
     """該 run 的 config.yaml（dict）。"""
     return yaml.safe_load((Path(run_dir) / "config.yaml").read_text(encoding="utf-8"))
+
+
+def _parse_json_cell(v):
+    """JSON 字串 → Python 物件；None/NA → None（Phase 2/3 空欄慣例）。"""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    return json.loads(v)
+
+
+def load_decisions(run_dir: str | Path) -> pd.DataFrame:
+    """decisions.parquet，JSON 字串欄就地解析為 Python 物件（dict/list/None）。
+
+    band_blocked/corr_fell_back 維持 nullable boolean。回傳供 Decision Explorer 與頁面消費。
+    """
+    dec = pd.read_parquet(Path(run_dir) / "decisions.parquet")
+    for c in _JSON_COLS:
+        if c in dec.columns:
+            dec[c] = dec[c].map(_parse_json_cell)
+    return dec

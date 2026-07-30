@@ -29,3 +29,18 @@ def test_load_metrics_and_manifest(run_dir):
 def test_load_config(run_dir):
     c = readers.load_run_config(run_dir)
     assert c["risk"]["corr_model"] == "ewma"
+
+
+def test_load_decisions_parses_json_columns(run_dir):
+    dec = readers.load_decisions(run_dir)
+    # full 策略某決策列
+    full = dec[dec["strategy_id"] == "full"].iloc[0]
+    assert isinstance(full["target_weights"], dict)
+    assert isinstance(full["eligible"], list)
+    assert isinstance(full["selected"], list)
+    # None 字面欄（如 bh_spy 的 momentum_scores）→ Python None
+    bh = dec[dec["strategy_id"] == "bh_spy"].iloc[0]
+    assert bh["momentum_scores"] is None
+    # nullable boolean 保持
+    assert dec["band_blocked"].dtype.name == "boolean"
+    assert "corr_fell_back" in dec.columns
