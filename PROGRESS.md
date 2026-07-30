@@ -2,7 +2,7 @@
 
 > 依據 `DEVELOPMENT_GUIDE v1.2.md` §9「開發順序與里程碑」。
 > 規則：**每個 Phase 的 AC（驗收條件）不過，不進下一階段。**
-> 最後更新：2026-07-13
+> 最後更新：2026-07-30
 
 ## 狀態圖例
 - ⬜ 未開始 　🟨 進行中 　✅ 完成（AC 通過） 　⛔ 卡關
@@ -20,7 +20,7 @@
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ✅ 完成（全 AC 達成） |
 | 5 | DCC 與 ERC | ~1 週 | ✅ 完成（5a 相關模型層 + 5b ERC，全 AC 達成）|
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ✅ 完成（parity 達成；轉正刻意不做，見備忘）|
-| 7 | Dashboard 與研究報告 | ~2.5 週 | ⬜ 未開始 |
+| 7 | Dashboard 與研究報告 | ~2.5 週 | 🟨 進行中（7a 引擎落盤 ✅ + readers ✅；7a UI/7b/7c 待）|
 
 **總時程**：約 3-3.5 個月業餘時間。Phase 0-2 建議暑假密集完成。
 
@@ -450,21 +450,45 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 
 ---
 
-## Phase 7 — Dashboard 與研究報告　⬜
+## Phase 7 — Dashboard 與研究報告　🟨
 
-7a 唯讀頁面、7b Run Lab、7c 最終研究報告。
+依 brainstorming 定案，7a 再切兩塊（設計文件 `docs/superpowers/specs/2026-07-29-phase7a-dashboard-design.md`）：
+**7a 引擎診斷落盤（計畫 1，✅）**、**7a presentation readers 地基（計畫 2a，✅）**、7a UI（計畫 2b，待）。
+之後 7b Run Lab、7c 研究報告。設計/計畫見 `docs/superpowers/specs|plans/` 的 `phase7a-*`。
 
 ### 任務
-- [ ] 7a：8 個頁面（總覽/決策解剖/GARCH/相關結構/組合成本/消融/資料品質，§11.2）
-- [ ] `presentation/app.py`（Streamlit 入口）
-- [ ] `presentation/readers.py`（runs/、snapshots/ 唯讀載入）
-- [ ] 7b：`presentation/jobs.py`（Run Lab、subprocess、status.json 合約，§11.3）
+- [x] **計畫 1 引擎落盤**：`trade_deltas`、`corr_fell_back`/residuals accessor、`Diagnostics` corr_matrix/corr_fell_back 接線（含 5a M-1）、engine trade blotter（`run_strategy` 回 4-tuple）、runner 攤平 correlation/residuals、`write_artifacts` 落盤 `trades.parquet` + `model_details/{correlation,residuals}.parquet`、blotter fill_price 誠實守護
+- [x] **計畫 2a readers**：`presentation/readers.py` 16 函數（run 載入 / Decision Explorer 六層 / model_details / 快照 / list_runs）+ AST 架構守護測試（§2.2 紅綠燈）
+- [ ] **計畫 2b UI**：`presentation/app.py` + 全域控制列 + 9 頁 Streamlit（§11.2 原 8 頁 + 新增頁 9「價格與交易」）+ AppTest smoke + AC① 人工手查
+- [ ] 7b：Run Lab（`presentation/jobs.py`、subprocess、status.json 合約，§11.3）
 - [ ] 7c：最終研究報告（以消融表為骨架）
 
 ### AC
-- [ ] Decision Explorer 六層數字與 decisions.parquet 手查一致
-- [ ] 從 Run Lab 提交新 config 並完整跑完回測，全程不碰終端機
-- [ ] UI 行程強制終止再重啟後，運行中 job 狀態與進度無損
+- [~] **AC①（自動化已達成）**：Decision Explorer 六層抽取 golden 測試通過（`readers.decision_layers` 逐層對上獨立解析的 decisions.parquet；含 null/log-only 路徑）。**人工手查**待計畫 2b 頁面到位。
+- [ ] 從 Run Lab 提交新 config 並完整跑完回測，全程不碰終端機（7b）
+- [ ] UI 行程強制終止再重啟後，運行中 job 狀態與進度無損（7b）
+
+### Phase 7a 計畫 1 實作備忘（與原規劃的差異）
+1. **7a 含引擎端落盤**（非純展示層）：頁 3/4/9 所需診斷（相關矩陣、標準化殘差、blotter）Phase 4/5 引擎未落盤；使用者定案採「補落盤 + 重跑」而非優雅退化。了結 **Phase 5a I-1**（`corr_fell_back` 現 durable 落 `decisions.parquet`）。
+2. **新增第 9 頁「價格與交易」**（§11.2 8 頁 + 報告陳述需要擴充）；`trades.parquet` 為新一級 artifact（每執行日 per-ticker 精確成交，由 `accounting.trade_deltas` 接出 + 執行日 adj_close）。
+3. **Decision Explorer 層 d 只呈現年化 σ̂ + 前次對照**（非 21 步曲線，逐步曲線歸頁 3）——避免為單頁重跑引擎。
+4. **INV-6 content_hashes 只納入 `trades.parquet`**（一級結果、與 nav turnover/cost 對帳）；`model_details/*` 為深掘診斷不進 identity 合約。
+5. **對帳誠實閘門**：blotter 逐執行日 `Σ|Δw|==nav.turnover`、`Σcost==nav.cost`（結構保證，測試守）；fill_price 非正有限值誠實拋錯（final review）。
+
+### Phase 7a 計畫 1 實測與驗證（快照 `2026-07-16_20ed09`）
+- 重跑 2 canonical run（`corr_model=dcc`/`ewma`，全 8 策略）；**blotter 逐執行日對帳零誤差**（~25,800 筆交易，兩 run）。
+- correlation.parquet 僅 `full`/`full_erc`（voltarget K=1 略）；residuals 涵蓋 3 個 vol-target 策略、20 檔。
+- **dcc `corr_fell_back` 佔比 1.22%**，獨立重現 Phase 5a 記錄的 1.2% DCC fallback——結論可稽核性由 durable 落盤確立。
+- 全套件（含 7 個 `requires_snapshot` AC 閘門）+ INV-3/5/6 綠、ruff 乾淨。opus holistic review 判「ready to merge」（2 Minor：fill_price 守護、`_BPS` 單一來源，皆已修）。
+
+### Phase 7a 計畫 2a 實作備忘
+1. **薄頁面、胖 readers**：所有 JSON 欄解析與檔案載入集中 `readers.py`；缺 `trades.parquet`/`model_details/` 回 `None`（§0「本次未儲存」，斷 `store_details` pickle 舊教訓）。
+2. **§2.2 邊界紅綠燈化**：AST 架構守護測試掃 `presentation/` 全樹、`readers.py` 只 import stdlib/pandas/yaml——**holistic review 抓到並修掉守護的真實 bypass**（`from quantcore import backtest` 只看 `node.module` 會漏；已展開 `PKG.NAME`），並讓 teeth 測試走真實偵測碼（原為平行 inline 檢查、無鑑別力）。
+3. **AC① 自動化**：`DecisionLayers` + `decision_layers` 六層抽取，golden 逐層對上獨立 `json.loads` 的原始 decisions 列（含 executed 與 null/log-only band_blocked 兩路徑）；`decision_layers` 多列誠實拋錯（無靜默 fallback）。
+4. 以 subagent-driven TDD 執行 8 個 task，實質模組經 spec + code-quality 兩段式 review + 一次整體 holistic review；23 presentation 測試綠，真實 canonical run 冒煙通過。
+
+### Phase 7a 邊界（目前）
+引擎診斷落盤 + presentation readers 地基完整、AC① 自動化達成。**計畫 2b 做 `app.py` + 全域控制列 + 9 頁 Streamlit + AC① 人工手查**（頁面呼叫已完成的 readers、以 `streamlit.testing.v1.AppTest` 冒煙）；之後 7b Run Lab（引擎端 status.json 心跳 + job runner + 崩潰復原）、7c 研究報告。
 
 ---
 
@@ -495,3 +519,6 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
   為已驗證的替代/研究路徑 + 學習成品。學習目標 100% 達成；「轉正」的效能稅不值得付（日後要翻先補解析梯度）。
   6 處規格偏離見上方 Phase 6 備忘。**Phase 6 學習里程碑達成 ✅**。
 - 2026-07-27：**Phase 5b ERC 權重完成，Phase 5 全部 AC 達成**——`portfolio/weighting.py` 的 `erc_weights`（等風險貢獻，Spinu 循環座標下降：長單由正根結構保證、決定性、無優化器失敗模式、未收斂誠實拋錯）、獨立策略 `full_erc`（cov-first 自有 decide()，與 `full` apples-to-apples 只差權重層，不動已 5a-硬化的 inverse_vol 熱路徑）、base 純提取 `_build_cov` + `_exposure_decision` 共用 helper（行為不變、corr 每決策一次）。無新 config（ERC 求解器常數為演算法常數）。全套測試 347 綠（+ `requires_snapshot` 本機閘門 `test_phase5b_ac.py`）。以 subagent-driven TDD 執行 6 個 task，實質模組經 spec + code-quality 兩段式 review，抓修 3 項（ERC 單資產守護前置/CCD 非收斂靜默、apples-to-apples 測試 K=2 無鑑別力——**發現 K=2 時 ERC≡inverse-vol 的數學事實**、改 K≥3 並明文鎖住恆等式）。**AC 誠實結論**：ERC vs inverse-vol 消融——full（inverse-vol）Sharpe 0.602/Calmar 0.489/MaxDD −14.9% vs full_erc（ERC）0.587/0.413/−17.4%；配對 bootstrap（full−full_erc）Sharpe/Calmar CI 皆含 0、**點估計微偏 inverse-vol**——**ERC 未打敗 inverse-vol，v1 續用 inverse-vol（預設不變）、ERC 留 `full_erc` 研究/選項**（§5.3 合格結論，印證「先簡後繁是紀律」）。4 處規格偏離見上方 Phase 5b 備忘。**Phase 5 全部 AC 達成 ✅**：v1 生產路徑為 EWMA 相關 + inverse-vol 權重（兩簡單基線皆未被 DCC/ERC 打敗），DCC/ERC 保留為研究選項。
+- 2026-07-27：Phase 5 以 `--no-ff` 合併回 main，並開 `feature/phase6-garch-own`（後續 Phase 6、Phase 7a 分支自此鏈上疊代）。
+- 2026-07-30：**Phase 7a 計畫 1 引擎診斷落盤完成**（分支 `feature/phase7a-dashboard`）——為 dashboard 頁 3/4/9 補齊 Phase 4/5 引擎未落盤的診斷：`accounting.trade_deltas`（turnover 的 per-ticker 分解，結構化）、`CorrelationForecaster.last_fell_back`/`VolForecaster.all_standardized_residuals`、`Diagnostics` 加 `corr_matrix`/`corr_fell_back` 並 thread 過決策熱路徑（含 Phase 5a M-1 快取移位）、engine **trade blotter**（`run_strategy` 回 4-tuple、5 呼叫端更新）、runner 攤平 correlation/residuals、`write_artifacts` 落盤 `trades.parquet`（進 INV-6 content_hashes）+ `model_details/{correlation,residuals}.parquet`、blotter fill_price 誠實守護。以 subagent-driven TDD 執行 9 個 task + review 修正，實質模組經 spec + code-quality 兩段式 review + opus holistic review（判 ready to merge、2 Minor 已修）。**重跑 2 canonical run（dcc/ewma，全 8 策略）**：blotter 逐執行日 `Σ|Δw|==turnover`/`Σcost==cost` **零誤差**（~25,800 筆）；**dcc `corr_fell_back` 1.22% 獨立重現 Phase 5a 的 1.2%**，了結 5a I-1。全套件（含 7 AC 閘門）+ INV-3/5/6 綠、ruff 乾淨。
+- 2026-07-30：**Phase 7a 計畫 2a presentation readers 地基完成**——`presentation/readers.py` 16 個純唯讀函數（run 載入 / **Decision Explorer 六層抽取＝AC① 自動化 golden** / model_details / 快照 / list_runs），缺檔優雅回 `None`；**AST 架構守護測試**把「presentation 永不 import 引擎」（§2.2）紅綠燈化。以 subagent-driven TDD 執行 8 個 task，實質模組經 spec + code-quality 兩段式 review + 一次整體 holistic review——**抓到並修掉守護的真實 bypass**（`from quantcore import backtest` 漏判）與 teeth 測試無鑑別力、`decision_layers` 多列靜默 fallback。23 presentation 測試綠，真實 canonical run 冒煙通過（六層 / 相關矩陣 / 面板皆正確）。**AC① 自動化達成**（人工手查待計畫 2b）。**邊界：計畫 2b 做 app + 9 頁 Streamlit UI + AC① 人工手查。**
