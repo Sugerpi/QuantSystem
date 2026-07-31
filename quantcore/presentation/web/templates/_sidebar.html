@@ -1,0 +1,6 @@
+<nav class="sidebar">
+  <div class="brand">QuantCore</div>
+  {% for href, label in nav %}
+  <a class="nav-item {% if href == active %}active{% endif %}" href="{{ href }}{{ ctrl.query_suffix }}">{{ label }}</a>
+  {% endfor %}
+</nav>

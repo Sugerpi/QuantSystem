@@ -1,0 +1,18 @@
+<h1 class="page-title">總覽</h1>
+{% if ctrl.run is none %}
+<p class="empty">runs/ 下無回測 run。</p>
+{% else %}
+{% for sid, metrics in metrics_by_strategy.items() %}
+<section class="strat-block">
+  <h2 class="strat-name">{{ sid }}</h2>
+  <div class="kpi-grid">
+    {% for key, val in metrics.items() %}
+    <div class="kpi-card">
+      <div class="kpi-label">{{ key }}</div>
+      <div class="kpi-value">{{ "%.4g"|format(val) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endif %}
