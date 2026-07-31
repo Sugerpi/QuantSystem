@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from quantcore.presentation.web.routes import overview, portfolio, stubs
+from quantcore.presentation.web.routes import data_quality, overview, portfolio, stubs
 from quantcore.presentation.web.templating import STATIC_DIR
 
 
@@ -23,6 +23,7 @@ def create_app(runs_root: Path | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(overview.router)
     app.include_router(portfolio.router)
+    app.include_router(data_quality.router)
     app.include_router(stubs.router)
 
     @app.get("/")

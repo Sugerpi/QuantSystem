@@ -27,7 +27,6 @@ def test_stub_pages_reachable(runs_root):
         "/garch",
         "/correlation",
         "/ablation",
-        "/data-quality",
         "/run-lab",
         "/price-trades",
     ]:

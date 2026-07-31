@@ -17,7 +17,6 @@ _STUBS = [
     ("/garch", "GARCH"),
     ("/correlation", "相關結構"),
     ("/ablation", "消融"),
-    ("/data-quality", "資料品質"),
     ("/run-lab", "回測工作台"),
     ("/price-trades", "價格與交易"),
 ]
