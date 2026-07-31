@@ -1,11 +1,24 @@
-"""頁面渲染：整頁 vs HTMX 片段。HX-Request → 只回內容片段（不含骨架）。"""
+"""頁面渲染：整頁 vs HTMX 片段。HX-Request → 只回內容片段（不含骨架）。
+
+亦提供 controls_for：各頁共用的全域控制解析（run/策略/日期），避免每個路由重寫。
+"""
 
 from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 
+from quantcore.presentation import readers
+from quantcore.presentation.web import cache, controls
 from quantcore.presentation.web.templating import templates
+
+
+def controls_for(request: Request) -> controls.Controls:
+    """由 request 的 runs_root + query params 組出全域 Controls（缺 runs 目錄回空）。"""
+    root = request.app.state.runs_root
+    runs = cache.read(root, readers.list_runs) if root.exists() else []
+    return controls.parse_controls(request.query_params, root, runs)
+
 
 NAV = [
     ("/overview", "總覽"),

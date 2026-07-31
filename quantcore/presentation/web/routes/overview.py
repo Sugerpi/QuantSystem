@@ -6,16 +6,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from quantcore.presentation import readers
-from quantcore.presentation.web import cache, controls
-from quantcore.presentation.web.rendering import render_page
+from quantcore.presentation.web import cache
+from quantcore.presentation.web.rendering import controls_for, render_page
 
 router = APIRouter()
-
-
-def controls_for(request: Request) -> controls.Controls:
-    root = request.app.state.runs_root
-    runs = cache.read(root, readers.list_runs) if root.exists() else []
-    return controls.parse_controls(request.query_params, root, runs)
 
 
 @router.get("/overview", response_class=HTMLResponse)

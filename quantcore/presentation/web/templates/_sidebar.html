@@ -1,6 +1,8 @@
 <nav class="sidebar">
   <div class="brand">QuantCore</div>
   {% for href, label in nav %}
-  <a class="nav-item {% if href == active %}active{% endif %}" href="{{ href }}{{ ctrl.query_suffix }}">{{ label }}</a>
+  <a class="nav-item {% if href == active %}active{% endif %}"
+     href="{{ href }}{{ ctrl.query_suffix }}"
+     hx-get="{{ href }}{{ ctrl.query_suffix }}" hx-target="#content" hx-push-url="true">{{ label }}</a>
   {% endfor %}
 </nav>
