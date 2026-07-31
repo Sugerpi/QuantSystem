@@ -1,0 +1,42 @@
+<h1 class="page-title">價格與交易</h1>
+{% if error %}<p class="empty">{{ error }}</p>{% else %}
+<div class="pt-grid">
+  <div>
+    <h2 class="section-title">價格與進出場（{{ tk }}）</h2>
+    <form method="get" class="page-controls">
+      <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+      <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+      <label class="ctl">標的 <select name="tk" onchange="this.form.submit()">{% for t in tickers %}<option value="{{ t }}" {% if t==tk %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+      <span class="ident">點綠▲/紅▼ 標記跳該日決策解剖</span>
+    </form>
+    <div id="pt-price-wrap">{{ price_fig|safe }}</div>
+  </div>
+  <div class="pt-side">
+    <div class="chart-title">標的 · 現持有 w</div>
+    {% for row in ticker_rows %}
+    <a class="pt-tick {% if row.ticker==tk %}active{% endif %}"
+       href="/price-trades?run={{ ctrl.run }}&strat={{ ctrl.strategies | join(',') }}&tk={{ row.ticker }}"
+       hx-get="/price-trades?run={{ ctrl.run }}&strat={{ ctrl.strategies | join(',') }}&tk={{ row.ticker }}"
+       hx-target="#content" hx-push-url="true">
+      <span>{{ row.ticker }}</span>
+      <span>{% if row.weight is number %}{{ "%.3f"|format(row.weight) }}{% else %}—{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<h2 class="section-title">持倉隨時間（堆疊，{{ strategy }}）</h2>
+<div class="chart-card">{{ stack_fig|safe }}</div>
+
+<h2 class="section-title">成交明細 blotter · {{ strategy }} · {{ n_trades }} 筆</h2>
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <input type="hidden" name="tk" value="{{ tk }}">
+  <label class="ctl">篩標的 <select name="ftk" onchange="this.form.submit()"><option value="">（全部）</option>{% for t in tickers %}<option value="{{ t }}" {% if t==ftk %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <span class="ident">第 {{ page + 1 }} / {{ npages }} 頁</span>
+</form>
+<div style="overflow-x:auto"><table class="data-table"><thead><tr>{% for c in blot_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in blot_rows %}<tr>{% for c in blot_cols %}<td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+{% endif %}

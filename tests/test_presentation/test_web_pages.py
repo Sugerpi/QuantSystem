@@ -64,3 +64,9 @@ def test_ablation_page_renders(runs_root):
     r = _client(runs_root).get("/ablation")
     assert r.status_code == 200
     assert ("指標表" in r.text) or ("無消融表" in r.text)
+
+
+def test_price_trades_flagship(runs_root):
+    r = _client(runs_root).get("/price-trades")
+    assert r.status_code == 200
+    assert ("價格與進出場" in r.text) or ("本次未儲存" in r.text)

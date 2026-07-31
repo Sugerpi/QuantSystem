@@ -24,7 +24,6 @@ def test_stub_pages_reachable(runs_root):
     client = _client(runs_root)
     for path in [
         "/run-lab",
-        "/price-trades",
     ]:
         r = client.get(path)
         assert r.status_code == 200

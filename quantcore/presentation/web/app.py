@@ -20,6 +20,7 @@ from quantcore.presentation.web.routes import (
     garch,
     overview,
     portfolio,
+    price_trades,
     stubs,
 )
 from quantcore.presentation.web.templating import STATIC_DIR
@@ -37,6 +38,7 @@ def create_app(runs_root: Path | None = None) -> FastAPI:
     app.include_router(ablation.router)
     app.include_router(portfolio.router)
     app.include_router(data_quality.router)
+    app.include_router(price_trades.router)
     app.include_router(stubs.router)
 
     @app.get("/")

@@ -14,7 +14,6 @@ router = APIRouter()
 
 _STUBS = [
     ("/run-lab", "回測工作台"),
-    ("/price-trades", "價格與交易"),
 ]
 
 
