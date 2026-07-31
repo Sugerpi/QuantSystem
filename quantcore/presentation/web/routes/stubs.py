@@ -13,7 +13,6 @@ from quantcore.presentation.web.rendering import controls_for, render_page
 router = APIRouter()
 
 _STUBS = [
-    ("/ablation", "消融"),
     ("/run-lab", "回測工作台"),
     ("/price-trades", "價格與交易"),
 ]

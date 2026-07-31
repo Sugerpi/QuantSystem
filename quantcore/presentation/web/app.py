@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from quantcore.presentation.web.routes import (
+    ablation,
     correlation,
     data_quality,
     decisions,
@@ -33,6 +34,7 @@ def create_app(runs_root: Path | None = None) -> FastAPI:
     app.include_router(decisions.router)
     app.include_router(garch.router)
     app.include_router(correlation.router)
+    app.include_router(ablation.router)
     app.include_router(portfolio.router)
     app.include_router(data_quality.router)
     app.include_router(stubs.router)

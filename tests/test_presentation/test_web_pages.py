@@ -58,3 +58,9 @@ def test_correlation_page_renders(runs_root):
     r = _client(runs_root).get("/correlation")
     assert r.status_code == 200
     assert ("相關矩陣熱圖" in r.text) or ("本次未儲存" in r.text)
+
+
+def test_ablation_page_renders(runs_root):
+    r = _client(runs_root).get("/ablation")
+    assert r.status_code == 200
+    assert ("指標表" in r.text) or ("無消融表" in r.text)
