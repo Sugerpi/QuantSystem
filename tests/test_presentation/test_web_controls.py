@@ -16,6 +16,16 @@ def test_default_picks_latest_backtest_run_not_vol_eval():
     assert c.available_runs == ["vol_eval", "canonical_ewma"]
 
 
+def test_default_skips_trailing_non_backtest_run():
+    runs = [
+        {"name": "canonical_ewma", "path": "/r/canonical_ewma", "strategies": ["bh_spy", "full"]},
+        {"name": "vol_eval", "path": "/r/vol_eval", "strategies": []},
+    ]
+    c = parse_controls({}, Path("/r"), runs)
+    assert c.run == "canonical_ewma"
+    assert c.strategies == ["bh_spy", "full"]
+
+
 def test_explicit_run_honoured():
     c = parse_controls({"run": "vol_eval"}, Path("/r"), _RUNS)
     assert c.run == "vol_eval"
