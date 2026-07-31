@@ -37,3 +37,11 @@ def test_data_quality_shows_manifest_or_missing(runs_root):
     assert "資料品質" in r.text
     # 快照或在本機（顯示 MANIFEST）或只有 hash 進版控（顯示「不在本機」）
     assert ("不在本機" in r.text) or ("MANIFEST" in r.text)
+
+
+def test_decisions_six_layers(runs_root):
+    r = _client(runs_root).get("/decisions")
+    assert r.status_code == 200
+    for lbl in ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]:
+        assert lbl in r.text
+    assert "目標權重" in r.text

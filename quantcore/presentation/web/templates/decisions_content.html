@@ -1,0 +1,50 @@
+<h1 class="page-title">決策解剖</h1>
+{% if error %}
+<p class="empty">{{ error }}</p>
+{% else %}
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <label class="ctl">決策日
+    <input type="range" name="didx" min="0" max="{{ dates|length - 1 }}" value="{{ didx }}"
+           onchange="this.form.submit()">
+  </label>
+  <span class="ident">{{ strategy }} · {{ ddate }} · event={{ layer.event }} · exec={{ layer.execution_date }}</span>
+</form>
+
+<h2 class="section-title">(a) point-in-time 合格選單</h2>
+<p>{{ layer.eligible | join(", ") }}</p>
+
+<h2 class="section-title">(b) 動量分數（前 K 高亮）</h2>
+{% if mom_fig %}{{ mom_fig|safe }}{% else %}<p class="empty">本策略無動量層。</p>{% endif %}
+
+<h2 class="section-title">(c) 絕對動量 pass/fail</h2>
+{% if layer.absmom %}
+<table class="data-table"><thead><tr><th>ticker</th><th>pass</th></tr></thead><tbody>
+{% for t, v in layer.absmom.items() %}<tr><td class="rowhead">{{ t }}</td><td>{{ v }}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}<p class="empty">—</p>{% endif %}
+
+<h2 class="section-title">(d) 波動 σ̂（年化，vs 上一決策日）</h2>
+{% if sigma_rows %}
+<table class="data-table"><thead><tr><th>ticker</th><th>σ̂</th><th>σ̂(前)</th></tr></thead><tbody>
+{% for row in sigma_rows %}<tr><td class="rowhead">{{ row.ticker }}</td>
+<td>{{ "%.4g"|format(row.sigma) }}</td>
+<td>{% if row.sigma_prev is number %}{{ "%.4g"|format(row.sigma_prev) }}{% else %}—{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}<p class="empty">—</p>{% endif %}
+
+<h2 class="section-title">(e) 曝險：E = clip(σ*/σ̂_p)</h2>
+{% if exposure %}
+<pre class="json-block">{{ exposure | tojson(indent=2) }}</pre>
+{% if layer.w_risky %}
+<table class="data-table"><thead><tr><th>ticker</th><th>w_risky</th></tr></thead><tbody>
+{% for t, v in layer.w_risky.items() %}<tr><td class="rowhead">{{ t }}</td><td>{{ "%.4g"|format(v) }}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
+{% else %}<p class="empty">本策略無曝險層。</p>{% endif %}
+
+<h2 class="section-title">(f) 目標權重（含 CASH）</h2>
+<table class="data-table"><thead><tr><th>ticker</th><th>target</th></tr></thead><tbody>
+{% for t, v in layer.target_weights.items() %}<tr><td class="rowhead">{{ t }}</td><td>{{ "%.4g"|format(v) }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
