@@ -41,10 +41,16 @@ def decisions(request: Request) -> HTMLResponse:
         ctx["error"] = f"{strat} 無決策紀錄。"
         return _render(request, ctx)
     dates = list(sub["decision_date"])
-    try:
-        didx = int(request.query_params.get("didx", len(dates) - 1))
-    except ValueError:
-        didx = len(dates) - 1
+    ddate_q = request.query_params.get("ddate")
+    if ddate_q:
+        want = pd.Timestamp(ddate_q)
+        le = [i for i, d in enumerate(dates) if pd.Timestamp(d) <= want]
+        didx = le[-1] if le else 0
+    else:
+        try:
+            didx = int(request.query_params.get("didx", len(dates) - 1))
+        except ValueError:
+            didx = len(dates) - 1
     didx = max(0, min(didx, len(dates) - 1))
     ddate = dates[didx]
     layer = readers.decision_layers(ctrl.run_dir, strat, ddate)

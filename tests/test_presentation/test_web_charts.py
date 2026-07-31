@@ -128,3 +128,23 @@ def test_resid_acf_lags():
     fig = charts.resid_acf(rng.normal(size=50), lags=10)
     assert fig.data[0].type == "bar"
     assert len(fig.data[0].y) == 10
+
+
+def test_price_with_trades_line_and_marks():
+    price = pd.Series(
+        [100.0, 101.0, 102.0, 103.0],
+        index=pd.date_range("2020-01-01", periods=4, freq="D"),
+    )
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-02", "2020-01-04"]),
+            "side": ["buy", "sell"],
+            "fill_price": [101.0, 103.0],
+        }
+    )
+    fig = charts.price_with_trades(price, tr, "SPY")
+    names = {t.name for t in fig.data}
+    assert "SPY price" in names
+    assert any("buy" in n for n in names) and any("sell" in n for n in names)
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert buy.customdata is not None  # 供點擊跳決策
