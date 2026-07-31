@@ -120,3 +120,9 @@ def test_snapshot_dir_for_run(run_dir):
     got = readers.snapshot_dir_for_run(run_dir)
     assert isinstance(got, Path)
     assert got == Path(cfg["snapshot"])  # Path==Path 跨平台一致（str(Path) 在 Windows 為反斜線）
+
+
+def test_is_backtest_run(run_dir, tmp_path):
+    assert readers.is_backtest_run(run_dir) is True  # 合成 run 有 nav.parquet
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")  # 僅 manifest、無 nav
+    assert readers.is_backtest_run(tmp_path) is False

@@ -19,6 +19,9 @@ if not _runs:
     st.stop()
 
 run_dir = _root / _runs[0]
+if not readers.is_backtest_run(run_dir):
+    st.info(f"{_runs[0]} 非回測 run（無 nav/decisions）——請選 canonical/backtest run。")
+    st.stop()
 nav = readers.load_nav(run_dir)
 weights = readers.load_weights(run_dir)
 decisions = readers.load_decisions(run_dir)

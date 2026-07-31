@@ -43,7 +43,10 @@ def render_sidebar() -> None:
         st.sidebar.warning(f"{root} 下無 run")
         return
     names = [r["name"] for r in runs]
-    default = st.session_state.get("selected_runs") or names[-1:]
+    # 預設優先選有回測結果的 run（有 strategies）；vol_eval/ablation 等非回測 run 不當預設，
+    # 否則總覽/決策解剖等 nav 類頁面一開就對缺 nav 的 run 崩潰。
+    backtest_names = [r["name"] for r in runs if r["strategies"]]
+    default = st.session_state.get("selected_runs") or (backtest_names[-1:] or names[-1:])
     st.sidebar.multiselect(
         "Run",
         names,

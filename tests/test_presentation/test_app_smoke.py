@@ -99,3 +99,21 @@ def test_price_trades_page(runs_root, run_dir):
     at.run()
     assert not at.exception
     assert any("交易" in s.value or "價格" in s.value for s in at.subheader)
+
+
+def test_nav_pages_graceful_on_non_backtest_run(tmp_path):
+    """選到非回測 run（vol_eval/ablation：僅 manifest、無 nav）時，nav 類頁面須優雅提示、不崩潰。"""
+    import json
+
+    d = tmp_path / "vol_eval"
+    d.mkdir()
+    (d / "manifest.json").write_text(
+        json.dumps({"identity": {}, "created_at": "t"}), encoding="utf-8"
+    )
+    for page in ("1_Overview", "2_Decision_Explorer", "3_GARCH", "5_Portfolio_Cost"):
+        at = AppTest.from_file(f"quantcore/presentation/pages/{page}.py", default_timeout=30)
+        at.session_state["runs_root"] = str(tmp_path)
+        at.session_state["selected_runs"] = ["vol_eval"]
+        at.session_state["selected_strategies"] = []
+        at.run()
+        assert not at.exception, f"{page} 對非回測 run 崩潰：{at.exception}"

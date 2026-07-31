@@ -22,6 +22,9 @@ if not _runs:
     st.stop()
 
 run_dir = _root / _runs[0]
+if not readers.is_backtest_run(run_dir):
+    st.info(f"{_runs[0]} 非回測 run（無 nav/decisions）——請選 canonical/backtest run。")
+    st.stop()
 dec = readers.load_decisions(run_dir)
 strat = (_strats or sorted(dec["strategy_id"].unique()))[0]
 sub = dec[(dec["strategy_id"] == strat)].sort_values("decision_date")

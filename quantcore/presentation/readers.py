@@ -34,6 +34,7 @@ __all__ = [
     "load_bootstrap",
     "load_vol_eval",
     "snapshot_dir_for_run",
+    "is_backtest_run",
 ]
 
 _JSON_COLS = (
@@ -47,6 +48,16 @@ _JSON_COLS = (
     "vol_fell_back",
     "garch_params",
 )
+
+
+def is_backtest_run(run_dir: str | Path) -> bool:
+    """該 run 是否為回測 run（有 nav.parquet）。
+
+    vol_eval / ablation 等非回測 run（僅 manifest + 各自產物、無 nav/decisions）回 False，
+    供 nav/decisions 類頁面優雅提示而非崩潰。注意：真正的回測 run 若缺 nav 屬損壞，
+    load_nav 仍會拋錯（此 helper 只區分 run 型別，不掩蓋損壞）。
+    """
+    return (Path(run_dir) / "nav.parquet").exists()
 
 
 def load_nav(run_dir: str | Path) -> pd.DataFrame:
