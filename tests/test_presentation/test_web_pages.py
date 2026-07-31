@@ -70,3 +70,17 @@ def test_price_trades_flagship(runs_root):
     r = _client(runs_root).get("/price-trades")
     assert r.status_code == 200
     assert ("價格與進出場" in r.text) or ("本次未儲存" in r.text)
+
+
+def test_price_trades_page_param_ok(runs_root):
+    r = _client(runs_root).get("/price-trades?page=1")
+    assert r.status_code == 200
+    assert ("第 " in r.text) or ("本次未儲存" in r.text)
+
+
+def test_price_trades_csv_export(runs_root):
+    r = _client(runs_root).get("/price-trades/export.csv")
+    assert r.status_code in (200, 404)
+    if r.status_code == 200:
+        assert "csv" in r.headers["content-type"]
+        assert "attachment" in r.headers.get("content-disposition", "")

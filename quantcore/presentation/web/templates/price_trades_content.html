@@ -32,10 +32,17 @@
 <form method="get" class="page-controls">
   <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
   <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <input type="hidden" name="focus" value="{{ ctrl.focus or '' }}">
   <input type="hidden" name="tk" value="{{ tk }}">
   <label class="ctl">篩標的 <select name="ftk" onchange="this.form.submit()"><option value="">（全部）</option>{% for t in tickers %}<option value="{{ t }}" {% if t==ftk %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
-  <span class="ident">第 {{ page + 1 }} / {{ npages }} 頁</span>
 </form>
+{% set pbase = ctrl.query_suffix ~ "&tk=" ~ tk ~ "&ftk=" ~ ftk %}
+<div class="page-controls">
+  <span class="ident">第 {{ page + 1 }} / {{ npages }} 頁（每頁 50 筆）</span>
+  {% if page > 0 %}<a class="pgbtn" href="{{ pbase }}&page={{ page - 1 }}" hx-get="{{ pbase }}&page={{ page - 1 }}" hx-target="#content" hx-push-url="true">‹ 上一頁</a>{% endif %}
+  {% if page < npages - 1 %}<a class="pgbtn" href="{{ pbase }}&page={{ page + 1 }}" hx-get="{{ pbase }}&page={{ page + 1 }}" hx-target="#content" hx-push-url="true">下一頁 ›</a>{% endif %}
+  <a class="pgbtn" href="/price-trades/export.csv{{ ctrl.query_suffix }}&ftk={{ ftk }}">⬇ 匯出 CSV（Excel 可開）</a>
+</div>
 <div style="overflow-x:auto"><table class="data-table"><thead><tr>{% for c in blot_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
 {% for row in blot_rows %}<tr>{% for c in blot_cols %}<td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
 </tbody></table></div>
