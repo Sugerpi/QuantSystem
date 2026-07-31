@@ -13,7 +13,6 @@ from quantcore.presentation.web.rendering import controls_for, render_page
 router = APIRouter()
 
 _STUBS = [
-    ("/garch", "GARCH"),
     ("/correlation", "相關結構"),
     ("/ablation", "消融"),
     ("/run-lab", "回測工作台"),

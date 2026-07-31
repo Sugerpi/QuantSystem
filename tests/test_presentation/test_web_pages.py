@@ -45,3 +45,10 @@ def test_decisions_six_layers(runs_root):
     for lbl in ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]:
         assert lbl in r.text
     assert "目標權重" in r.text
+
+
+def test_garch_page_renders(runs_root):
+    r = _client(runs_root).get("/garch")
+    assert r.status_code == 200
+    assert "GARCH 檢視" in r.text
+    assert "fallback" in r.text.lower()

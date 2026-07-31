@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from quantcore.presentation.web.routes import (
     data_quality,
     decisions,
+    garch,
     overview,
     portfolio,
     stubs,
@@ -29,6 +30,7 @@ def create_app(runs_root: Path | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(overview.router)
     app.include_router(decisions.router)
+    app.include_router(garch.router)
     app.include_router(portfolio.router)
     app.include_router(data_quality.router)
     app.include_router(stubs.router)
