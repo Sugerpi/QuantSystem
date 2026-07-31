@@ -210,6 +210,8 @@ Streamlit 用 `st.session_state`；Web 版改用 **URL query string** 承載全�
 
 ## 7. Run Lab（頁 8，7b）— subprocess + status.json + 崩潰復原
 
+> **本次重製不做**（使用者定案 2026-07-31，見 §10）。頁 8 只放 stub。以下設計要點供 7b 屆時取用。
+
 沿用 §11.3 合約，用 Web 實作（比 Streamlit 更自然）：
 
 - **提交**：表單（選 base config + 覆寫參數）→ POST → `jobs.py` 以 **subprocess** 起引擎 CLI（`python -m quantcore.experiments.runner ...`，**非 import**）。回 job id。
@@ -242,18 +244,21 @@ Streamlit 用 `st.session_state`；Web 版改用 **URL query string** 承載全�
 
 ## 10. 交付切段（供 writing-plans 切計畫）
 
-建議三段（各自 spec→plan→實作→review，比照歷來 Phase）：
+**本次重製範圍（使用者定案 2026-07-31）：只做唯讀頁，不含 Run Lab。** 兩段（各自 spec→plan→實作→review，比照歷來 Phase）：
 
 - **計畫 1 — Web 地基**：`pyproject` 換依賴、`web/app.py` factory、`base.html` 骨架（左導覽 + 頂部控制列）、`app.css` 深色 Bloomberg 主題、`controls.py`（query 解析）、`cache.py`、`charts.py` Plotly 深色 template、擴 AST 架構守護、vendored htmx/plotly、`TestClient` 冒煙。**退役 Streamlit `app.py`/`pages/`/`controls.py` 與其測試。**
-- **計畫 2 — 九頁唯讀（含旗艦頁 9）**：頁 1–7、9 內容移植 + 旗艦頁 9 四元件 + 跨圖表點擊事件；頁 8 先 stub。AC① 於頁 2 重驗（自動 golden + 人工手查）。
-- **計畫 3 — Run Lab（7b）**：`jobs.py` subprocess + `status.json` 合約 + 引擎端心跳 writer + 崩潰復原；AC②③。
-- （7c 研究報告沿用方案 B 靜態 HTML 輸出，獨立於本重製，之後另議。）
+- **計畫 2 — 八頁唯讀 + 旗艦頁 9**：頁 1–7、9 內容移植 + 旗艦頁 9 四元件 + 跨圖表點擊事件；**頁 8 Run Lab 只放 stub**（連結佔位，說明「7b 之後提供」）。AC① 於頁 2 重驗（自動 golden + 人工手查）。
 
-AC 對映：**AC①** 於計畫 2 保持；**AC②③** 於計畫 3 達成。三者皆為 §9 Phase 7 原 AC，不因換前端而改變。
+**延後（不在本次重製）**：
+
+- **7b Run Lab**：`jobs.py` subprocess + `status.json` 合約 + 引擎端心跳 writer + 崩潰復原（AC②③）。待唯讀 dashboard 生出來、使用者實測滿意後，再單獨開一段做。設計要點已記於 §7 供屆時取用。
+- **7c 研究報告**：沿用方案 B 靜態 HTML 輸出，獨立於本重製，之後另議。
+
+AC 對映：**AC①** 於計畫 2 保持（§9 Phase 7 原 AC，不因換前端而改變）；**AC②③** 隨 7b 延後、屆時達成。
 
 ---
 
 ## 11. 待決／已決事項
 
-- **已決**：不上 DB（§0.1）；深色單一主題（§4）；狀態走 query string（§2.4）；Streamlit 退役（§2.2）；旗艦頁四元件（§6）。
-- **待使用者確認（spec review 時）**：計畫切段是否照 §10 三段；頁 8 Run Lab 是否確定納入本次重製（或先只做唯讀 8 頁 + 頁 8 stub、7b 之後再做）。
+- **已決**：不上 DB（§0.1）；深色單一主題（§4）；狀態走 query string（§2.4）；Streamlit 退役（§2.2）；旗艦頁四元件（§6）；**本次只做唯讀頁、Run Lab（7b）延後、頁 8 放 stub**（使用者定案 2026-07-31，§10）。
+- **無其他待決項**。
