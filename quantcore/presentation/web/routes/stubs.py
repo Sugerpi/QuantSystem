@@ -16,7 +16,6 @@ _STUBS = [
     ("/decisions", "決策解剖"),
     ("/garch", "GARCH"),
     ("/correlation", "相關結構"),
-    ("/portfolio", "組合與成本"),
     ("/ablation", "消融"),
     ("/data-quality", "資料品質"),
     ("/run-lab", "回測工作台"),

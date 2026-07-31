@@ -26,7 +26,6 @@ def test_stub_pages_reachable(runs_root):
         "/decisions",
         "/garch",
         "/correlation",
-        "/portfolio",
         "/ablation",
         "/data-quality",
         "/run-lab",
