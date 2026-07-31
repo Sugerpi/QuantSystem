@@ -52,3 +52,9 @@ def test_garch_page_renders(runs_root):
     assert r.status_code == 200
     assert "GARCH 檢視" in r.text
     assert "fallback" in r.text.lower()
+
+
+def test_correlation_page_renders(runs_root):
+    r = _client(runs_root).get("/correlation")
+    assert r.status_code == 200
+    assert ("相關矩陣熱圖" in r.text) or ("本次未儲存" in r.text)

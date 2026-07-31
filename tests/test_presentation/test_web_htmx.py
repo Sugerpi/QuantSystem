@@ -23,7 +23,6 @@ def test_full_request_includes_shell(runs_root):
 def test_stub_pages_reachable(runs_root):
     client = _client(runs_root)
     for path in [
-        "/correlation",
         "/ablation",
         "/run-lab",
         "/price-trades",
