@@ -2,7 +2,7 @@
 
 > 依據 `DEVELOPMENT_GUIDE v1.2.md` §9「開發順序與里程碑」。
 > 規則：**每個 Phase 的 AC（驗收條件）不過，不進下一階段。**
-> 最後更新：2026-07-30
+> 最後更新：2026-07-31
 
 ## 狀態圖例
 - ⬜ 未開始 　🟨 進行中 　✅ 完成（AC 通過） 　⛔ 卡關
@@ -20,7 +20,7 @@
 | 4 | 波動率模型與波動目標 | ~1-2 週 | ✅ 完成（全 AC 達成） |
 | 5 | DCC 與 ERC | ~1 週 | ✅ 完成（5a 相關模型層 + 5b ERC，全 AC 達成）|
 | 6 | 手刻 GARCH（學習里程碑） | ~2-3 週 | ✅ 完成（parity 達成；轉正刻意不做，見備忘）|
-| 7 | Dashboard 與研究報告 | ~2.5 週 | 🟨 進行中（7a 引擎落盤 ✅ + readers ✅；7a UI/7b/7c 待）|
+| 7 | Dashboard 與研究報告 | ~2.5 週 | 🟨 進行中（7a 唯讀 dashboard 9 頁 ✅、AC① 達成；7b Run Lab/7c 報告 待）|
 
 **總時程**：約 3-3.5 個月業餘時間。Phase 0-2 建議暑假密集完成。
 
@@ -452,19 +452,19 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 
 ## Phase 7 — Dashboard 與研究報告　🟨
 
-依 brainstorming 定案，7a 再切兩塊（設計文件 `docs/superpowers/specs/2026-07-29-phase7a-dashboard-design.md`）：
-**7a 引擎診斷落盤（計畫 1，✅）**、**7a presentation readers 地基（計畫 2a，✅）**、7a UI（計畫 2b，待）。
-之後 7b Run Lab、7c 研究報告。設計/計畫見 `docs/superpowers/specs|plans/` 的 `phase7a-*`。
+依 brainstorming 定案，7a 切成：**引擎診斷落盤（計畫 1，✅）**、**presentation readers 地基（計畫 2a，✅）**、
+**dashboard UI 9 頁（計畫 2b＝2b-1 核心 3 頁 + 2b-2 其餘 5 頁，✅）**。之後 7b Run Lab、7c 研究報告。
+設計/計畫見 `docs/superpowers/specs|plans/` 的 `phase7a-*`。**7a 唯讀 dashboard 段完成、AC① 達成。**
 
 ### 任務
 - [x] **計畫 1 引擎落盤**：`trade_deltas`、`corr_fell_back`/residuals accessor、`Diagnostics` corr_matrix/corr_fell_back 接線（含 5a M-1）、engine trade blotter（`run_strategy` 回 4-tuple）、runner 攤平 correlation/residuals、`write_artifacts` 落盤 `trades.parquet` + `model_details/{correlation,residuals}.parquet`、blotter fill_price 誠實守護
 - [x] **計畫 2a readers**：`presentation/readers.py` 16 函數（run 載入 / Decision Explorer 六層 / model_details / 快照 / list_runs）+ AST 架構守護測試（§2.2 紅綠燈）
-- [ ] **計畫 2b UI**：`presentation/app.py` + 全域控制列 + 9 頁 Streamlit（§11.2 原 8 頁 + 新增頁 9「價格與交易」）+ AppTest smoke + AC① 人工手查
+- [x] **計畫 2b UI**：`presentation/app.py`（st.navigation）+ `controls` 全域控制列 + 9 頁 Streamlit（§11.2 原 8 頁 + 新增頁 9「價格與交易」；頁 8 Run Lab 為 stub）+ AppTest smoke + AC① 人工手查
 - [ ] 7b：Run Lab（`presentation/jobs.py`、subprocess、status.json 合約，§11.3）
 - [ ] 7c：最終研究報告（以消融表為骨架）
 
 ### AC
-- [~] **AC①（自動化已達成）**：Decision Explorer 六層抽取 golden 測試通過（`readers.decision_layers` 逐層對上獨立解析的 decisions.parquet；含 null/log-only 路徑）。**人工手查**待計畫 2b 頁面到位。
+- [x] **AC① 達成**：自動化——Decision Explorer 六層抽取 golden 測試（`readers.decision_layers` 逐層對上獨立解析的 decisions.parquet；含 null/log-only 路徑）；人工——真實 run `canonical_ewma`/full/2016-04-06 六層 11 項 vs `decisions.parquet` 逐格一致（`docs/phase7a-ac1-handcheck.md`）。頁 2 Decision Explorer 為其 UI 出口。
 - [ ] 從 Run Lab 提交新 config 並完整跑完回測，全程不碰終端機（7b）
 - [ ] UI 行程強制終止再重啟後，運行中 job 狀態與進度無損（7b）
 
@@ -487,8 +487,21 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 3. **AC① 自動化**：`DecisionLayers` + `decision_layers` 六層抽取，golden 逐層對上獨立 `json.loads` 的原始 decisions 列（含 executed 與 null/log-only band_blocked 兩路徑）；`decision_layers` 多列誠實拋錯（無靜默 fallback）。
 4. 以 subagent-driven TDD 執行 8 個 task，實質模組經 spec + code-quality 兩段式 review + 一次整體 holistic review；23 presentation 測試綠，真實 canonical run 冒煙通過。
 
+### Phase 7a 計畫 2b 實作備忘（dashboard UI 9 頁）
+1. **架構**：`st.navigation` 多頁（明確中文標題、取代 auto-`pages/`）+ `controls.render_sidebar` 每頁前執行寫 `st.session_state`；頁面薄——讀 `controls`+`readers`+plotly 畫圖，缺資料 `st.info` 優雅。streamlit 1.59 + plotly + scipy（QQ）。以 `streamlit.testing.v1.AppTest` 冒煙（seed session_state 測單頁）。
+2. **9 頁**：1 總覽（NAV 對數疊圖/指標/回撤/曝險/子期間）、2 決策解剖（AC① UI，六層瀑布讀 `decision_layers`）、3 GARCH（參數軌跡/persistence/fallback/QLIKE·MZ-R²/殘差 QQ+ACF）、4 相關結構（熱圖時間滑桿/資產對序列/頁內第二 run 疊 DCC vs EWMA）、5 組合與成本（權重堆疊/曝險帶事件/換手成本）、6 消融（指標表/敏感度熱圖/配對 bootstrap CI）、7 資料品質（MANIFEST/資料源/overrides/tickers）、8 Run Lab（stub→7b）、9 價格與交易（adj_close 折線+買賣標記+blotter）。
+3. **AST 架構守護擴至 app/controls/pages**（§2.2）——全 presentation 樹不 import 引擎。以 subagent-driven TDD 執行（2b-1 八 task、2b-2 七 task），實質頁面經 spec + code-quality review + 各段一次 holistic review（2b-1 holistic 實測啟動 Streamlit server HTTP 200 + live 重算 AC① 數字）。
+4. **spec review 抓到 §11.2 頁 3 兩缺項（記 backlog）**：條件波動 vs 已實現波動 proxy 疊圖（刻意延，需快照報酬對齊）；「手刻 vs arch parity」對照頁籤（**卡引擎**：parity 結果未落盤 `runs/`，需引擎端先吐 parity artifact 才能做）。
+5. **開啟即崩潰 bug 修正（使用者實測抓到）**：側欄預設選字母序最後 run，`runs/vol_eval`（有 manifest、無 nav）排最後 → 總覽頁 `load_nav` 一開就 `FileNotFoundError`。冒煙測試皆明確指定 backtest run、從未走「預設選非回測 run」路徑而漏抓。修：`readers.is_backtest_run`（判有無 nav）+ 頁 1/2/3/5 對非回測 run 優雅提示；側欄預設優先選有 `strategies` 的回測 run（實測預設落 `canonical_ewma`、入口不崩潰）。加回歸測試鎖住。
+
+### Phase 7a backlog（誠實記錄，延 7b/後續）
+- 頁 3「條件波動 vs 已實現波動 proxy 疊圖」、「手刻 vs arch parity」對照頁籤（後者需引擎補 parity 落盤）。
+- `st.cache_data` 快取讀取路徑（Decision Explorer/相關 slider 每 tick 重讀 parquet）；全域多 run 疊圖（現各頁只讀第一個選中 run，頁 4 以頁內第二 run 選擇器折衷）。
+- §11.2 richer：NAV vs benchmarks、指標 bootstrap CI 進總覽、層 a 未合格「灰顯標原因」（需引擎補排除原因欄）、層 c fail→現金流視覺化。
+- `use_container_width`→`width`（streamlit 已 deprecate，1.59 仍可用）；頁面 smoke 覆蓋補齊（no-decisions/多 run 分支）。
+
 ### Phase 7a 邊界（目前）
-引擎診斷落盤 + presentation readers 地基完整、AC① 自動化達成。**計畫 2b 做 `app.py` + 全域控制列 + 9 頁 Streamlit + AC① 人工手查**（頁面呼叫已完成的 readers、以 `streamlit.testing.v1.AppTest` 冒煙）；之後 7b Run Lab（引擎端 status.json 心跳 + job runner + 崩潰復原）、7c 研究報告。
+引擎診斷落盤 + readers 地基 + **唯讀 dashboard 9 頁完整、AC①（自動化+人工）達成、可 `uv run streamlit run quantcore/presentation/app.py` 啟動**。**尚待 7b Run Lab（引擎端 status.json 心跳 + job runner + subprocess CLI + 崩潰復原，AC②③）、7c 研究報告。** 分支 `feature/phase7a-dashboard` 保留現狀（未併回 main；其下疊著未併的 phase6）。
 
 ---
 
@@ -522,3 +535,5 @@ DCC 與 ERC 保留為 config/研究選項。可進 Phase 6（手刻 GARCH）。
 - 2026-07-27：Phase 5 以 `--no-ff` 合併回 main，並開 `feature/phase6-garch-own`（後續 Phase 6、Phase 7a 分支自此鏈上疊代）。
 - 2026-07-30：**Phase 7a 計畫 1 引擎診斷落盤完成**（分支 `feature/phase7a-dashboard`）——為 dashboard 頁 3/4/9 補齊 Phase 4/5 引擎未落盤的診斷：`accounting.trade_deltas`（turnover 的 per-ticker 分解，結構化）、`CorrelationForecaster.last_fell_back`/`VolForecaster.all_standardized_residuals`、`Diagnostics` 加 `corr_matrix`/`corr_fell_back` 並 thread 過決策熱路徑（含 Phase 5a M-1 快取移位）、engine **trade blotter**（`run_strategy` 回 4-tuple、5 呼叫端更新）、runner 攤平 correlation/residuals、`write_artifacts` 落盤 `trades.parquet`（進 INV-6 content_hashes）+ `model_details/{correlation,residuals}.parquet`、blotter fill_price 誠實守護。以 subagent-driven TDD 執行 9 個 task + review 修正，實質模組經 spec + code-quality 兩段式 review + opus holistic review（判 ready to merge、2 Minor 已修）。**重跑 2 canonical run（dcc/ewma，全 8 策略）**：blotter 逐執行日 `Σ|Δw|==turnover`/`Σcost==cost` **零誤差**（~25,800 筆）；**dcc `corr_fell_back` 1.22% 獨立重現 Phase 5a 的 1.2%**，了結 5a I-1。全套件（含 7 AC 閘門）+ INV-3/5/6 綠、ruff 乾淨。
 - 2026-07-30：**Phase 7a 計畫 2a presentation readers 地基完成**——`presentation/readers.py` 16 個純唯讀函數（run 載入 / **Decision Explorer 六層抽取＝AC① 自動化 golden** / model_details / 快照 / list_runs），缺檔優雅回 `None`；**AST 架構守護測試**把「presentation 永不 import 引擎」（§2.2）紅綠燈化。以 subagent-driven TDD 執行 8 個 task，實質模組經 spec + code-quality 兩段式 review + 一次整體 holistic review——**抓到並修掉守護的真實 bypass**（`from quantcore import backtest` 漏判）與 teeth 測試無鑑別力、`decision_layers` 多列靜默 fallback。23 presentation 測試綠，真實 canonical run 冒煙通過（六層 / 相關矩陣 / 面板皆正確）。**AC① 自動化達成**（人工手查待計畫 2b）。**邊界：計畫 2b 做 app + 9 頁 Streamlit UI + AC① 人工手查。**
+- 2026-07-30：**Phase 7a 計畫 2b-1 dashboard 骨架 + 核心 3 頁完成**——`app.py`（st.navigation）+ `controls` 全域控制列 + 頁 1 總覽 / **頁 2 決策解剖（AC① UI，六層瀑布讀 `decision_layers`）** / 頁 5 組合與成本 + 頁 8 Run Lab stub。以驗證過的 streamlit 1.59 API（st.navigation/st.Page/AppTest）為準；AST 架構守護擴至 app/controls/pages。以 subagent-driven TDD 執行 8 個 task + holistic review（**實測啟動 Streamlit server HTTP 200 + live 重算 AC① 數字**，抓修守護 bypass 已見 2a、多 run 標籤過度承諾）。**AC① 人工手查達成**（`docs/phase7a-ac1-handcheck.md`：真實 `canonical_ewma`/full/2016-04-06 六層 11 項 vs `decisions.parquet` 逐格一致，含 band-blocked/log-only 路徑）。
+- 2026-07-31：**Phase 7a 計畫 2b-2 dashboard 其餘 5 頁完成 → 唯讀 dashboard 9 頁齊備**——頁 3 GARCH（參數軌跡/persistence/fallback/QLIKE·MZ-R²/殘差 QQ+ACF）、頁 4 相關結構（熱圖時間滑桿/資產對序列/頁內第二 run 疊 DCC vs EWMA）、頁 6 消融（指標表/敏感度熱圖/配對 bootstrap CI）、頁 7 資料品質（MANIFEST/資料源/overrides/tickers）、頁 9 價格與交易（adj_close 折線+買賣標記+blotter）+ 新 readers（vol_eval/comparison/bootstrap/snapshot_dir）。以 subagent-driven TDD 執行 7 個 task；39→41 presentation 測試綠，9 頁對真實 canonical_dcc + ablation run 逐頁 AppTest 冒煙無例外。spec review 抓到 §11.2 頁 3 兩缺項（proxy 疊圖延、parity 對照頁籤卡引擎落盤）記 backlog。**使用者實測抓到「開啟即崩潰」bug**（側欄預設選到非回測 run `vol_eval` → 總覽 `load_nav` FileNotFoundError；冒煙皆指定 backtest run 而漏抓）——修 `is_backtest_run` 守護 + 側欄預設優先回測 run + 回歸測試。**7a 唯讀 dashboard 段完成，可 `uv run streamlit run quantcore/presentation/app.py` 啟動；尚待 7b Run Lab / 7c 報告。**
