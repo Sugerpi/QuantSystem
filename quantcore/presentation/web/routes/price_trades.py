@@ -32,7 +32,8 @@ def price_trades(request: Request) -> HTMLResponse:
     if trades is None:
         ctx["error"] = "本次未儲存（無 trades.parquet）。"
         return _render(request, ctx)
-    strat = (ctrl.strategies or sorted(trades["strategy_id"].unique()))[0]
+    tr_strats = sorted(trades["strategy_id"].unique())
+    strat = ctrl.focus if ctrl.focus in tr_strats else tr_strats[0]
     tr = trades[trades["strategy_id"] == strat].sort_values("execution_date")
     tickers = sorted(tr["ticker"].unique())
     tk = request.query_params.get("tk") or (tickers[0] if tickers else None)

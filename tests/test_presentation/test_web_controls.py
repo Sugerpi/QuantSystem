@@ -51,4 +51,26 @@ def test_empty_runs_yields_none_run():
 
 def test_query_suffix_roundtrips_selection():
     c = parse_controls({"run": "canonical_ewma", "strat": "full"}, Path("/r"), _RUNS)
-    assert c.query_suffix == "?run=canonical_ewma&strat=full"
+    assert c.query_suffix == "?run=canonical_ewma&strat=full&focus=full"
+
+
+def test_focus_defaults_to_full_not_bh_spy():
+    # 細節頁焦點策略預設優先 full（避免落到只有 SPY 的 bh_spy）
+    c = parse_controls({}, Path("/r"), _RUNS)
+    assert c.focus == "full"
+
+
+def test_focus_falls_back_to_first_when_no_full():
+    runs = [{"name": "r", "path": "/r/r", "strategies": ["bh_spy", "ew_menu"]}]
+    c = parse_controls({}, Path("/r"), runs)
+    assert c.focus == "bh_spy"
+
+
+def test_focus_honours_explicit_query():
+    c = parse_controls({"focus": "bh_spy"}, Path("/r"), _RUNS)
+    assert c.focus == "bh_spy"
+
+
+def test_focus_ignores_invalid_query():
+    c = parse_controls({"focus": "nope"}, Path("/r"), _RUNS)
+    assert c.focus == "full"

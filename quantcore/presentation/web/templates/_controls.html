@@ -7,6 +7,15 @@
         {% endfor %}
       </select>
     </label>
+    {% if ctrl.available_strategies %}
+    <label class="ctl">策略
+      <select name="focus" onchange="this.form.submit()">
+        {% for s in ctrl.available_strategies %}
+        <option value="{{ s }}" {% if s == ctrl.focus %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
   </form>
   <span class="spacer"></span>
   <span class="ident">{{ ctrl.run or "—" }}</span>

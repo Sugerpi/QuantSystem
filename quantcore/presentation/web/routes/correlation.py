@@ -30,10 +30,9 @@ def correlation(request: Request) -> HTMLResponse:
     if corr is None or corr.empty:
         ctx["error"] = "本次未儲存（無 model_details/correlation；僅 full/full_erc 有相關矩陣）。"
         return _render(request, ctx)
-    # 相關矩陣只有 full/full_erc 有；挑選中策略裡真的在 corr 的那個，否則第一個有的。
+    # 相關矩陣只有 full/full_erc 有；用焦點策略，若不在 corr（如 bh_spy）取第一個有的。
     corr_strats = sorted(corr["strategy_id"].unique())
-    chosen = [s for s in ctrl.strategies if s in corr_strats]
-    strat = chosen[0] if chosen else corr_strats[0]
+    strat = ctrl.focus if ctrl.focus in corr_strats else corr_strats[0]
     csub = corr[corr["strategy_id"] == strat]
     dates = sorted(csub["decision_date"].unique())
     if len(dates) == 0:

@@ -22,6 +22,7 @@ class Controls:
     available_strategies: list[str]
     date_from: str | None
     date_to: str | None
+    focus: str | None = None  # 細節頁的單一焦點策略（總覽/消融仍用 strategies 全比較）
 
     @property
     def query_suffix(self) -> str:
@@ -30,6 +31,8 @@ class Controls:
             parts.append(f"run={self.run}")
         if self.strategies:
             parts.append("strat=" + ",".join(self.strategies))
+        if self.focus:
+            parts.append(f"focus={self.focus}")
         if self.date_from:
             parts.append(f"from={self.date_from}")
         if self.date_to:
@@ -47,6 +50,17 @@ def _resolve_run(requested: str | None, runs: list[dict]) -> dict | None:
     return backtest[-1] if backtest else runs[-1]
 
 
+def _primary(available: list[str]) -> str | None:
+    """細節頁預設焦點策略：優先 full（多資產、最有內容），否則字母序第一個。
+
+    避免預設落到 bh_spy（buy-and-hold SPY，只有一檔、一筆交易），讓價格與交易等
+    細節頁一開就是空洞的單資產視圖。
+    """
+    if not available:
+        return None
+    return "full" if "full" in available else available[0]
+
+
 def parse_controls(params: Mapping[str, str], runs_root: Path, runs: list[dict]) -> Controls:
     """由 query params + list_runs 結果組出 Controls。runs 為 readers.list_runs 輸出。"""
     names = [r["name"] for r in runs]
@@ -62,6 +76,8 @@ def parse_controls(params: Mapping[str, str], runs_root: Path, runs: list[dict])
         strategies = [s for s in requested if s in available] or available
     else:
         strategies = available
+    focus_q = params.get("focus")
+    focus = focus_q if (focus_q and focus_q in available) else _primary(available)
     return Controls(
         runs_root=runs_root,
         run=chosen["name"],
@@ -71,4 +87,5 @@ def parse_controls(params: Mapping[str, str], runs_root: Path, runs: list[dict])
         available_strategies=available,
         date_from=date_from,
         date_to=date_to,
+        focus=focus,
     )

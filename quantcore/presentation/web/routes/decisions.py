@@ -35,7 +35,8 @@ def decisions(request: Request) -> HTMLResponse:
         ctx["error"] = "此頁需回測 run（含 decisions）。"
         return _render(request, ctx)
     dec = cache.read(ctrl.run_dir / "decisions.parquet", lambda p: readers.load_decisions(p.parent))
-    strat = (ctrl.strategies or sorted(dec["strategy_id"].unique()))[0]
+    dec_strats = sorted(dec["strategy_id"].unique())
+    strat = ctrl.focus if ctrl.focus in dec_strats else dec_strats[0]
     sub = dec[dec["strategy_id"] == strat].sort_values("decision_date")
     if sub.empty:
         ctx["error"] = f"{strat} 無決策紀錄。"

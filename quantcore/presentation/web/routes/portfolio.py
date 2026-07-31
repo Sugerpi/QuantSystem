@@ -26,7 +26,8 @@ def portfolio(request: Request) -> HTMLResponse:
         decisions = cache.read(
             ctrl.run_dir / "decisions.parquet", lambda p: readers.load_decisions(p.parent)
         )
-        strat = (ctrl.strategies or sorted(nav["strategy_id"].unique()))[0]
+        nav_strats = sorted(nav["strategy_id"].unique())
+        strat = ctrl.focus if ctrl.focus in nav_strats else nav_strats[0]
         ctx.update(
             strategy=strat,
             stack_fig=charts.to_fragment(charts.weight_stack(weights, strat), "pf-stack"),
