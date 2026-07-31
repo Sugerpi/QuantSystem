@@ -28,3 +28,12 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--mo
 .kpi-card { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 12px; }
 .kpi-label { color: var(--fg-dim); font-size: 11px; }
 .kpi-value { font-size: 20px; font-weight: 500; margin-top: 2px; }
+.chart-card { border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.chart-title { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.section-title { font-size: 14px; color: var(--amber); margin: 16px 0 8px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th, .data-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--border-soft); }
+.data-table th { color: var(--fg-dim); font-weight: 500; }
+.data-table .rowhead { text-align: left; color: var(--amber); }
+.json-block { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 12px; color: var(--fg); }

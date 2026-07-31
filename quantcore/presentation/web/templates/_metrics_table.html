@@ -1,0 +1,15 @@
+<table class="data-table">
+  <thead>
+    <tr><th>strategy</th>{% for c in metric_cols %}<th>{{ c }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+    {% for row in metric_rows %}
+    <tr>
+      <td class="rowhead">{{ row.strategy }}</td>
+      {% for c in metric_cols %}
+      <td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}—{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

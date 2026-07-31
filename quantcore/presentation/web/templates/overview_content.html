@@ -1,18 +1,19 @@
 <h1 class="page-title">總覽</h1>
-{% if ctrl.run is none %}
-<p class="empty">runs/ 下無回測 run。</p>
+{% if ctrl.run is none or error %}
+<p class="empty">{{ error or "runs/ 下無回測 run。" }}</p>
 {% else %}
-{% for sid, metrics in metrics_by_strategy.items() %}
-<section class="strat-block">
-  <h2 class="strat-name">{{ sid }}</h2>
-  <div class="kpi-grid">
-    {% for key, val in metrics.items() %}
-    <div class="kpi-card">
-      <div class="kpi-label">{{ key }}</div>
-      <div class="kpi-value">{{ "%.4g"|format(val) }}</div>
-    </div>
-    {% endfor %}
-  </div>
-</section>
-{% endfor %}
+<div class="chart-card">
+  <div class="chart-title">NAV（對數軸）</div>
+  {{ nav_fig|safe }}
+</div>
+<div class="chart-grid">
+  <div class="chart-card"><div class="chart-title">回撤</div>{{ dd_fig|safe }}</div>
+  <div class="chart-card"><div class="chart-title">曝險 E(t)</div>{{ exp_fig|safe }}</div>
+</div>
+<h2 class="section-title">指標</h2>
+{% include "_metrics_table.html" %}
+{% if subperiods %}
+<h2 class="section-title">子期間績效（{{ sub_strategy }}）</h2>
+<pre class="json-block">{{ subperiods | tojson(indent=2) }}</pre>
+{% endif %}
 {% endif %}
