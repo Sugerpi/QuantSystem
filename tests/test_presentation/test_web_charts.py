@@ -92,3 +92,39 @@ def test_turnover_cost_dual_series():
     fig = charts.turnover_cost(_nav_df(), "full")
     names = {t.name for t in fig.data}
     assert "turnover" in names and "累積成本" in names
+
+
+def test_momentum_bar_highlights_selected():
+    fig = charts.momentum_bar({"SPY": 0.3, "GLD": 0.1, "TLT": 0.2}, ["SPY", "TLT"])
+    assert len(fig.data) == 1
+    bar = fig.data[0]
+    assert list(bar.x) == ["SPY", "TLT", "GLD"]  # 由高到低
+    assert bar.marker.color[0] == charts.UP and bar.marker.color[2] != charts.UP
+
+
+def test_heatmap_basic():
+    fig = charts.heatmap([[1.0, 0.2], [0.2, 1.0]], ["A", "B"], ["A", "B"], zmin=-1, zmax=1)
+    assert fig.data[0].type == "heatmap"
+    assert list(fig.data[0].x) == ["A", "B"]
+
+
+def test_line_series_multi():
+    fig = charts.line_series({"omega": ([1, 2], [0.1, 0.2]), "beta": ([1, 2], [0.8, 0.85])})
+    assert {t.name for t in fig.data} == {"omega", "beta"}
+
+
+def test_resid_qq_has_points_and_diagonal():
+    import numpy as np
+
+    fig = charts.resid_qq(np.array([-1.0, 0.0, 1.0, 2.0, -0.5]))
+    assert len(fig.data) == 2  # 散點 + y=x
+    assert "y=x" in {t.name for t in fig.data}
+
+
+def test_resid_acf_lags():
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    fig = charts.resid_acf(rng.normal(size=50), lags=10)
+    assert fig.data[0].type == "bar"
+    assert len(fig.data[0].y) == 10

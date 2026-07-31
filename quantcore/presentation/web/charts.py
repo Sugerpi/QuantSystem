@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -128,3 +129,54 @@ def turnover_cost(nav: pd.DataFrame, strategy: str) -> go.Figure:
     style_dark(fig)
     fig.update_layout(yaxis2=dict(title="累積成本", overlaying="y", side="right", gridcolor=GRID))
     return fig
+
+
+def momentum_bar(scores: dict[str, float], selected: list[str]) -> go.Figure:
+    """動量分數長條，selected（前 K）以綠色高亮、其餘灰。"""
+    items = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    sel = set(selected or [])
+    colors = [UP if k in sel else "#6a6a62" for k, _ in items]
+    fig = go.Figure(go.Bar(x=[k for k, _ in items], y=[v for _, v in items], marker_color=colors))
+    return style_dark(fig)
+
+
+def heatmap(z, x, y, *, zmin=None, zmax=None, colorscale="Viridis") -> go.Figure:
+    """通用熱圖（相關矩陣 / 敏感度）。"""
+    fig = go.Figure(
+        go.Heatmap(z=z, x=list(x), y=list(y), zmin=zmin, zmax=zmax, colorscale=colorscale)
+    )
+    return style_dark(fig)
+
+
+def line_series(named: dict[str, tuple]) -> go.Figure:
+    """多條命名折線；named[name] = (x, y)。"""
+    fig = go.Figure()
+    for name, (xs, ys) in named.items():
+        fig.add_trace(go.Scatter(x=list(xs), y=list(ys), name=name, mode="lines"))
+    return style_dark(fig)
+
+
+def resid_qq(samples: np.ndarray) -> go.Figure:
+    """標準化殘差 QQ（vs 常態）+ y=x 對角。"""
+    from scipy import stats
+
+    s = np.sort(np.asarray(samples, dtype=float))
+    n = len(s)
+    theo = stats.norm.ppf((np.arange(1, n + 1) - 0.5) / n)
+    fig = go.Figure(go.Scatter(x=theo, y=s, mode="markers", name="樣本"))
+    lim = [float(min(theo.min(), s.min())), float(max(theo.max(), s.max()))]
+    fig.add_trace(go.Scatter(x=lim, y=lim, mode="lines", name="y=x"))
+    fig.update_layout(xaxis_title="理論分位", yaxis_title="樣本分位")
+    return style_dark(fig)
+
+
+def resid_acf(samples: np.ndarray, lags: int = 20) -> go.Figure:
+    """標準化殘差 ACF 長條。"""
+    s = np.asarray(samples, dtype=float)
+    s0 = s - s.mean()
+    denom = float(np.dot(s0, s0)) or 1.0
+    k = min(lags, len(s0) - 1)
+    acf = [float(np.dot(s0[:-i], s0[i:]) / denom) for i in range(1, k + 1)]
+    fig = go.Figure(go.Bar(x=list(range(1, k + 1)), y=acf))
+    fig.update_layout(xaxis_title="lag")
+    return style_dark(fig)
