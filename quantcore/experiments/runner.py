@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -228,20 +229,79 @@ def _cli(argv: list[str] | None = None) -> int:
         default=",".join(STRATEGIES),
         help=f"逗號分隔；可用：{', '.join(STRATEGIES)}",
     )
+    p.add_argument("--status-file", default=None, help="Run Lab 狀態檔（提供則寫 status.json）")
+    p.add_argument("--job-id", default=None, help="Run Lab job id（寫入 status.json）")
+    p.add_argument(
+        "--validate-only", action="store_true", help="只驗證 config（pydantic），不跑回測"
+    )
     args = p.parse_args(argv)
 
-    cfg = load_config(args.config)
+    if args.validate_only:
+        try:
+            load_config(args.config)
+        except Exception as e:  # noqa: BLE001 —— CLI 邊界回報所有驗證錯
+            print(f"config 無效：{type(e).__name__}: {e}")
+            return 1
+        print("OK")
+        return 0
+
     label = args.label or Path(args.config).stem
-    snapshot = load_snapshot(cfg.snapshot)
-    run_dir = run_experiment(
-        cfg=cfg,
-        snapshot=snapshot,
-        out_root=args.out_root,
-        label=label,
-        strategy_ids=[s.strip() for s in args.strategies.split(",") if s.strip()],
-    )
-    print(f"run 已完成：{run_dir}")
-    return 0
+    strategy_ids = [s.strip() for s in args.strategies.split(",") if s.strip()]
+
+    if args.status_file is None:
+        cfg = load_config(args.config)
+        snapshot = load_snapshot(cfg.snapshot)
+        run_dir = run_experiment(
+            cfg=cfg,
+            snapshot=snapshot,
+            out_root=args.out_root,
+            label=label,
+            strategy_ids=strategy_ids,
+        )
+        print(f"run 已完成：{run_dir}")
+        return 0
+
+    from quantcore.experiments.jobstatus import write_status
+
+    def _now() -> str:
+        return datetime.now().isoformat(timespec="seconds")
+
+    sf = args.status_file
+    try:
+        write_status(
+            sf,
+            job_id=args.job_id,
+            state="running",
+            stage="validating",
+            pid=os.getpid(),
+            started_at=_now(),
+        )
+        cfg = load_config(args.config)
+        write_status(sf, stage="loading_snapshot")
+        snapshot = load_snapshot(cfg.snapshot)
+        run_dir = run_experiment(
+            cfg=cfg,
+            snapshot=snapshot,
+            out_root=args.out_root,
+            label=label,
+            strategy_ids=strategy_ids,
+            on_progress=lambda i, n, sid: write_status(
+                sf, stage="running", strategy_index=i, strategy_total=n, current_strategy=sid
+            ),
+        )
+        write_status(sf, state="done", stage="done", finished_at=_now(), run_dir=str(run_dir))
+        print(f"run 已完成：{run_dir}")
+        return 0
+    except Exception as e:  # noqa: BLE001 —— 子行程邊界：任何失敗都要落 status
+        write_status(
+            sf,
+            state="failed",
+            stage="error",
+            finished_at=_now(),
+            error=f"{type(e).__name__}: {e}"[:2000],
+        )
+        print(f"回測失敗：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
