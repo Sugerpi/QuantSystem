@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -136,6 +137,7 @@ def run_experiment(
     label: str,
     strategy_ids: list[str],
     now: pd.Timestamp | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> Path:
     """跑完所有策略並寫出 run 目錄，回傳該目錄。"""
     now = pd.Timestamp.now() if now is None else now
@@ -151,7 +153,9 @@ def run_experiment(
     )
 
     navs, weights, decisions, trades, correlations, residuals, metrics = [], [], [], [], [], [], {}
-    for s in strategies:
+    for i, s in enumerate(strategies, start=1):
+        if on_progress is not None:
+            on_progress(i, len(strategies), s.strategy_id)
         nav_df, w_df, d_df, t_df = run_strategy(snapshot, clock, s, cfg)
         navs.append(nav_df)
         weights.append(w_df)
