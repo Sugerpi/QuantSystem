@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +46,7 @@ def _safe_label(label: str) -> str:
 def submit(jobs_root: str | Path, label: str, config_yaml: str) -> str:
     """建 job 目錄、寫 config.yaml 與初始 queued status.json。回 job_id。"""
     lbl = _safe_label(label)
-    job_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{lbl}"
+    job_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{lbl}_{uuid.uuid4().hex[:8]}"
     d = Path(jobs_root) / job_id
     d.mkdir(parents=True, exist_ok=True)
     (d / "config.yaml").write_text(config_yaml, encoding="utf-8")

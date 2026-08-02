@@ -49,3 +49,9 @@ def test_next_action_marks_failed_when_running_pid_dead():
 def test_submit_sanitizes_label(tmp_path):
     jid = jobs.submit(tmp_path, "my run/../x", "c")
     assert "/" not in jid and ".." not in jid
+
+
+def test_submit_rapid_same_label_unique_no_silent_overwrite(tmp_path):
+    ids = {jobs.submit(tmp_path, "x", f"c{i}") for i in range(20)}
+    assert len(ids) == 20  # 全部 job_id 唯一
+    assert len(jobs.list_jobs(tmp_path)) == 20  # 無靜默覆蓋，20 個 job 都在
