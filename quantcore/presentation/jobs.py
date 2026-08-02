@@ -143,7 +143,6 @@ def _spawn(jobs_root: str | Path, job_id: str, runs_root: str | Path) -> None:
     d = Path(jobs_root) / job_id
     st = load_status(jobs_root, job_id) or {}
     label = st.get("label", "run")
-    log = open(d / "stdout.log", "w", encoding="utf-8")  # noqa: SIM115 —— 交給子行程持有
     cmd = [
         sys.executable,
         "-m",
@@ -159,12 +158,14 @@ def _spawn(jobs_root: str | Path, job_id: str, runs_root: str | Path) -> None:
         "--job-id",
         job_id,
     ]
-    kwargs: dict = {"stdout": log, "stderr": subprocess.STDOUT}
+    kwargs: dict = {"stderr": subprocess.STDOUT}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
     else:
         kwargs["start_new_session"] = True
-    proc = subprocess.Popen(cmd, **kwargs)  # noqa: S603 —— 固定引擎 CLI、參數非使用者拼接
+    with open(d / "stdout.log", "w", encoding="utf-8") as log:
+        proc = subprocess.Popen(cmd, stdout=log, **kwargs)  # noqa: S603 —— 固定引擎 CLI、參數非使用者拼接
+    # 父端檔柄於此關閉；子行程已於 Popen 時 dup 自己的 fd，仍可寫入
     _write_status(
         d / "status.json", state="running", stage="starting", pid=proc.pid, started_at=_now()
     )
