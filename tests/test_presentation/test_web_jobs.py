@@ -55,3 +55,36 @@ def test_submit_rapid_same_label_unique_no_silent_overwrite(tmp_path):
     ids = {jobs.submit(tmp_path, "x", f"c{i}") for i in range(20)}
     assert len(ids) == 20  # 全部 job_id 唯一
     assert len(jobs.list_jobs(tmp_path)) == 20  # 無靜默覆蓋，20 個 job 都在
+
+
+def _rec(root, **kw):
+    # 注入 runs_root（tmp）+ 可注入 pid_alive/spawn
+    return jobs.reconcile_and_advance(root, root / "runs", **kw)
+
+
+def test_reconcile_marks_failed_running_with_dead_pid(tmp_path):
+    jid = jobs.submit(tmp_path, "r", "c")
+    jobs._write_status(tmp_path / jid / "status.json", state="running", pid=424242)
+    spawned = []
+    _rec(tmp_path, pid_alive=lambda pid: False, spawn=lambda root, jid_, rr: spawned.append(jid_))
+    st = jobs.load_status(tmp_path, jid)
+    assert st["state"] == "failed"
+    assert st["stage"] == "error"
+    assert spawned == []  # 標 failed 後本 tick 不再 spawn
+
+
+def test_reconcile_spawns_earliest_queued_when_idle(tmp_path):
+    j1 = jobs.submit(tmp_path, "a", "c")
+    jobs.submit(tmp_path, "b", "c")
+    spawned = []
+    _rec(tmp_path, pid_alive=lambda pid: True, spawn=lambda root, jid_, rr: spawned.append(jid_))
+    assert spawned == [j1]
+
+
+def test_reconcile_noop_when_running_alive(tmp_path):
+    jid = jobs.submit(tmp_path, "r", "c")
+    jobs._write_status(tmp_path / jid / "status.json", state="running", pid=1)
+    jobs.submit(tmp_path, "q", "c")
+    spawned = []
+    _rec(tmp_path, pid_alive=lambda pid: True, spawn=lambda root, jid_, rr: spawned.append(jid_))
+    assert spawned == []

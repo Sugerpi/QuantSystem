@@ -133,3 +133,68 @@ def _next_action(statuses: list[dict], pid_alive: Callable[[int], bool]):
     if queued:
         return ("spawn", queued[0]["job_id"])
     return None
+
+
+def _spawn(jobs_root: str | Path, job_id: str, runs_root: str | Path) -> None:
+    """detached subprocess 跑引擎 CLI；立刻寫 running+pid（關閉「重複 spawn / 誤判死亡」race）。
+
+    回測產物落 runs_root（= dashboard 讀取的 runs 根），非硬編 "runs"。
+    """
+    d = Path(jobs_root) / job_id
+    st = load_status(jobs_root, job_id) or {}
+    label = st.get("label", "run")
+    log = open(d / "stdout.log", "w", encoding="utf-8")  # noqa: SIM115 —— 交給子行程持有
+    cmd = [
+        sys.executable,
+        "-m",
+        "quantcore.experiments.runner",
+        "--config",
+        str(d / "config.yaml"),
+        "--out-root",
+        str(runs_root),
+        "--label",
+        label,
+        "--status-file",
+        str(d / "status.json"),
+        "--job-id",
+        job_id,
+    ]
+    kwargs: dict = {"stdout": log, "stderr": subprocess.STDOUT}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    else:
+        kwargs["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **kwargs)  # noqa: S603 —— 固定引擎 CLI、參數非使用者拼接
+    _write_status(
+        d / "status.json", state="running", stage="starting", pid=proc.pid, started_at=_now()
+    )
+
+
+def reconcile_and_advance(
+    jobs_root: str | Path,
+    runs_root: str | Path,
+    pid_alive: Callable[[int], bool] | None = None,
+    spawn: Callable[[str | Path, str, str | Path], None] | None = None,
+) -> None:
+    """排程 tick：reconcile 死掉的 running→failed；閒置則 spawn 最早 queued。可注入（測試）。"""
+    if pid_alive is None:
+        import psutil
+
+        pid_alive = psutil.pid_exists
+    if spawn is None:
+        spawn = _spawn
+    with _LOCK:
+        action = _next_action(list_jobs(jobs_root), pid_alive)
+        if action is None:
+            return
+        kind, job_id = action
+        if kind == "mark_failed":
+            _write_status(
+                Path(jobs_root) / job_id / "status.json",
+                state="failed",
+                stage="error",
+                error="行程消失（可能硬當機）",
+                finished_at=_now(),
+            )
+        elif kind == "spawn":
+            spawn(jobs_root, job_id, runs_root)
