@@ -104,6 +104,8 @@ def validate(config_yaml: str) -> tuple[bool, str]:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
         )
         return r.returncode == 0, (r.stdout + r.stderr).strip()

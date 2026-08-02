@@ -47,3 +47,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--mo
 .pt-tick.active { background: #141008; color: var(--amber); border-left: 2px solid var(--amber); }
 .pgbtn { display: inline-block; padding: 3px 10px; font-size: 12px; color: var(--fg-dim); text-decoration: none; border: 1px solid var(--border-strong); border-radius: 4px; }
 .pgbtn:hover { color: var(--amber); border-color: var(--amber); background: var(--panel-2); }
+.yaml-editor { width: 100%; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 12px; padding: 10px; resize: vertical; }
+.ctl-input { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-family: var(--mono); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+.badge-queued { background: #23231f; color: var(--fg-dim); }
+.badge-running { background: #241a08; color: var(--amber); }
+.badge-done { background: #0d2417; color: var(--up); }
+.badge-failed { background: #2a1110; color: var(--down); }
