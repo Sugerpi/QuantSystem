@@ -1,0 +1,41 @@
+<h1 class="page-title">GARCH 檢視</h1>
+{% if error %}<p class="empty">{{ error }}</p>{% else %}
+<h2 class="section-title">GARCH 參數軌跡與 persistence</h2>
+{% if param_fig %}
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <label class="ctl">資產
+    <select name="tk" onchange="this.form.submit()">
+      {% for t in param_tickers %}<option value="{{ t }}" {% if t == tk %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+{{ param_fig|safe }}
+{% else %}<p class="empty">本策略/此 run 無 GARCH 參數（EWMA 或非波動目標策略）。</p>{% endif %}
+
+<h2 class="section-title">GARCH fallback 頻率（vol_fell_back）</h2>
+{% if fb_fig %}{{ fb_fig|safe }}{% else %}<p class="empty">—</p>{% endif %}
+
+<h2 class="section-title">QLIKE / MZ-R²（GARCH vs EWMA）</h2>
+{% if vol_eval_rows %}
+<div style="overflow-x:auto"><table class="data-table"><thead><tr>{% for c in vol_eval_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in vol_eval_rows %}<tr>{% for c in vol_eval_cols %}<td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="empty">本次未儲存（無 runs/vol_eval/）。</p>{% endif %}
+
+<h2 class="section-title">標準化殘差 QQ / ACF</h2>
+{% if qq_fig %}
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  {% if tk %}<input type="hidden" name="tk" value="{{ tk }}">{% endif %}
+  <label class="ctl">殘差資產
+    <select name="rtk" onchange="this.form.submit()">
+      {% for t in resid_tickers %}<option value="{{ t }}" {% if t == rtk %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+<div class="chart-grid"><div class="chart-card">{{ qq_fig|safe }}</div><div class="chart-card">{{ acf_fig|safe }}</div></div>
+{% else %}<p class="empty">本次未儲存（無 model_details/residuals）。</p>{% endif %}
+{% endif %}

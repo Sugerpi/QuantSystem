@@ -1,0 +1,23 @@
+<h1 class="page-title">消融比較</h1>
+<p class="empty" style="margin-bottom:8px">提示：敏感度表用於檢驗穩健性，不是用來挑最好的一格。</p>
+{% if error %}<p class="empty">{{ error }}</p>{% else %}
+<h2 class="section-title">指標表</h2>
+<div style="overflow-x:auto"><table class="data-table"><thead><tr>{% for c in comp_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in comp_rows %}<tr>{% for c in comp_cols %}<td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+
+<h2 class="section-title">敏感度熱圖（cell × 策略）</h2>
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <label class="ctl">指標 <select name="metric" onchange="this.form.submit()">{% for m in metrics %}<option value="{{ m }}" {% if m==metric %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+</form>
+{{ heat_fig|safe }}
+
+<h2 class="section-title">配對 bootstrap CI（full vs 消融版）</h2>
+{% if bs_rows %}
+<div style="overflow-x:auto"><table class="data-table"><thead><tr>{% for c in bs_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in bs_rows %}<tr>{% for c in bs_cols %}<td>{% if row[c] is number %}{{ "%.4g"|format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="empty">本 run 無 bootstrap.parquet。</p>{% endif %}
+{% endif %}

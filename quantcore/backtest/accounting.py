@@ -46,13 +46,22 @@ def apply_returns(
     return nav * growth, drifted
 
 
+def trade_deltas(drifted: dict[str, float], target: dict[str, float]) -> dict[str, float]:
+    """每檔風險資產的權重變動 target_i − drifted_i（**不含 CASH**）。
+
+    turnover 的 per-ticker 分解：trade blotter 由此接出，結構上保證
+    Σ|delta| ≡ turnover（現金為合成、無交易成本，計入會使單邊成本翻倍）。
+    """
+    keys = (set(drifted) | set(target)) - {CASH}
+    return {k: target.get(k, 0.0) - drifted.get(k, 0.0) for k in keys}
+
+
 def turnover(drifted: dict[str, float], target: dict[str, float]) -> float:
     """Σ_i |target_i − drifted_i|，**i 只跑風險資產**（§1.8、設計文件 §2.2）。
 
     現金為合成、無交易成本；計入 CASH 腿會使單邊成本變兩倍。
     """
-    keys = (set(drifted) | set(target)) - {CASH}
-    return sum(abs(target.get(k, 0.0) - drifted.get(k, 0.0)) for k in keys)
+    return sum(abs(dw) for dw in trade_deltas(drifted, target).values())
 
 
 def apply_costs(

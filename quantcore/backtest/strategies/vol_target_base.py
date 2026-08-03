@@ -126,7 +126,6 @@ class VolTargetStrategy(Strategy):
             state = self._select_and_weight(view)
             if state is None:
                 return None
-            self._cache = state
             e_current = None
         else:  # EXPOSURE_CHECK
             if self._cache is None:
@@ -134,8 +133,10 @@ class VolTargetStrategy(Strategy):
             assert self._e_current is not None  # _cache 已設 ⟹ 選擇日已賦值 _e_current
             state = self._refilter(view, self._cache)
             e_current = self._e_current
-        cov = self._build_cov(view, state.selected, state.sigma_hat, event)
-        return self._exposure_decision(state, cov, e_current)
+        cov, R = self._build_cov(view, state.selected, state.sigma_hat, event)
+        if event is DecisionEvent.SELECTION:
+            self._cache = state  # M-1：相關步驟成功後才寫快取（例外時不留半套狀態）
+        return self._exposure_decision(state, cov, R, e_current)
 
     def _build_cov(
         self,
@@ -143,18 +144,18 @@ class VolTargetStrategy(Strategy):
         selected: list[str],
         sigma_hat: dict[str, float],
         event: DecisionEvent,
-    ) -> pd.DataFrame:
-        """殘差 → corr.refit(選擇日)/filter(曝險檢查日) → build_covariance。每次決策呼叫一次。"""
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """殘差 → corr.refit(選擇日)/filter(曝險檢查日) → build_covariance。回 (Σ, R)。"""
         std_resid = self._collect_std_residuals(view, selected)
         R = (
             self._corr.refit(std_resid)
             if event is DecisionEvent.SELECTION
             else self._corr.filter(std_resid)
         )
-        return build_covariance(sigma_hat, R)
+        return build_covariance(sigma_hat, R), R
 
     def _exposure_decision(
-        self, state: RiskyState, cov: pd.DataFrame, e_current: float | None
+        self, state: RiskyState, cov: pd.DataFrame, R: pd.DataFrame, e_current: float | None
     ) -> Decision:
         """σ̂_p → target_exposure → 最終權重 + 現金 + Diagnostics + log-only Decision。"""
         cfg = self._cfg
@@ -185,6 +186,8 @@ class VolTargetStrategy(Strategy):
             band_blocked=exp.band_blocked,
             vol_fell_back=state.fell_back,
             garch_params=state.garch_params,
+            corr_matrix=R,
+            corr_fell_back=self._corr.last_fell_back(),
         )
         if not exp.band_blocked:
             self._e_current = exp.exposure_applied
@@ -193,3 +196,7 @@ class VolTargetStrategy(Strategy):
             diagnostics=diag,
             execute=not exp.band_blocked,
         )
+
+    def standardized_residuals(self) -> dict[str, pd.Series]:
+        """各檔最後一次 refit/filter 的標準化殘差（runner 於 run 結束落盤 residuals.parquet）。"""
+        return self._forecaster.all_standardized_residuals()

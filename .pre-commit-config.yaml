@@ -2,6 +2,10 @@
 #
 # formatter 只有 ruff-format 一個。曾經 black 與 ruff-format 並存，兩者對
 # 三元運算子鏈與隱式字串串接的換行意見不同，會在每次 commit 互相改寫同一個檔案。
+#
+# vendored 第三方 minified 前端資產（plotly/htmx）不進 lint/format/size-check：
+# 它們是產出物、非原始碼，且 plotly 全量 bundle 遠超 500KB 限制。
+exclude: '^quantcore/presentation/web/static/js/(plotly|htmx)\.min\.js$'
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.0

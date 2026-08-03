@@ -1,0 +1,25 @@
+<h1 class="page-title">回測工作台</h1>
+<form method="get" class="page-controls">
+  <label class="ctl">base config
+    <select name="base" onchange="this.form.submit()">
+      <option value="">（空白）</option>
+      {% for b in base_configs %}<option value="{{ b }}" {% if b==selected_base %}selected{% endif %}>{{ b }}</option>{% endfor %}
+    </select>
+  </label>
+  <span class="ident">選 base config 載入下方編輯器，改完提交</span>
+</form>
+
+<form method="post" action="/run-lab/submit" hx-post="/run-lab/submit" hx-target="#job-list">
+  <textarea name="config_yaml" rows="18" class="yaml-editor" spellcheck="false">{{ yaml_text }}</textarea>
+  <div class="page-controls">
+    <label class="ctl">label <input type="text" name="label" value="{{ selected_base or 'run' }}" class="ctl-input"></label>
+    <button type="button" class="pgbtn" hx-post="/run-lab/validate" hx-include="closest form" hx-target="#validate-result">驗證</button>
+    <button type="submit" class="pgbtn">提交回測</button>
+    <span id="validate-result"></span>
+  </div>
+</form>
+
+<h2 class="section-title">Jobs</h2>
+<div id="job-list" hx-get="/run-lab/status" hx-trigger="every 2s">
+  {% include "_job_list.html" %}
+</div>

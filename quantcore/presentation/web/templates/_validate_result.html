@@ -1,0 +1,6 @@
+{% if ok %}
+<span class="badge badge-done">config OK</span>
+{% else %}
+<span class="badge badge-failed">config 無效</span>
+<pre class="json-block">{{ msg }}</pre>
+{% endif %}

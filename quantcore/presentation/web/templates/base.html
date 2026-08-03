@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuantCore Dashboard</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<script src="/static/js/htmx.min.js" defer></script>
+<script src="/static/js/plotly.min.js"></script>
+<script src="/static/js/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div class="main">
+    {% include "_controls.html" %}
+    <div id="content" class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+</body>
+</html>

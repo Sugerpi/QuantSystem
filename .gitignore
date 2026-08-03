@@ -11,6 +11,8 @@ snapshots/*
 # 實驗輸出（見規格 §2.1 / §7.1）
 runs/*
 !runs/.gitkeep
+jobs/*
+!jobs/.gitkeep
 
 # --- Python ---
 __pycache__/

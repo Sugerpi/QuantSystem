@@ -1,0 +1,60 @@
+# QuantCore 預設參數（規格 §7.2）
+# 全系統唯一的參數來源。修改前先確認對應規格章節。
+
+snapshot: snapshots/2026-07-16_20ed09   # Phase 1 首份快照（20 檔，三源仲裁，決定性可重現）
+seed: 42
+
+universe:                            # §1.1 資產選單（v1 預設約 22 檔）
+  menu: [SPY, QQQ, IWM, XLK, XLF, XLE, XLV, XLI, XLP, XLU, XLY, XLB,
+         EFA, EEM, TLT, IEF, LQD, HYG, GLD, VNQ]
+  # DBC 已於 Phase 1 移除：2008 商品崩盤期資料三源（yfinance/Tiingo/TwelveData）
+  # 彼此皆不一致、§4.5 無法認證（含多日 yfinance 本身錯誤）。日後有可信商品源再加回。
+  min_history_days: 252             # §1.1 inception + 252 交易日才進選單
+
+signal:                             # §1.3 橫斷面 12-1 動量
+  momentum_lookback: 252
+  momentum_skip: 21
+  top_k: 5
+
+risk:                               # §1.6 / §5
+  vol_model: garch_arch              # §5.2 GARCH(1,1)-t 轉正，生產路徑。garch_arch | garch_own | ewma | rolling_std
+  corr_model: dcc                   # canonical dcc run（頁 4 DCC vs EWMA 疊圖用）。dcc | ewma
+  vol_target_annual: 0.10           # σ* 年化波動目標
+  exposure_band: 0.10               # 曝險更新帶
+  exposure_min: 0.10                # E_min
+  vol_window: 63                    # rolling_std 滾動窗（交易日），Phase 3 placeholder
+  ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
+  forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
+  garch_window: 1000                # GARCH 估計滾動窗上限（交易日，~4 年）；界定每次 fit 成本 O(cap)
+  dcc_refit_interval: 63            # §5.3 每 63 交易日重估 DCC (a,b)；設 0 = 固定模式（不估）
+  dcc_fixed_ab: [0.01, 0.96]        # 固定模式 (a,b)（舊系統值）；亦為重估不收斂時 fallback
+  dcc_qbar_shrink: 0.10             # Q̄ 向單位對角收縮係數（小樣本病態防護，可消融）
+
+schedule:                           # §1.7 再平衡時程
+  selection_interval: 21
+  exposure_check_interval: 5
+
+costs:                              # §1.8 交易成本
+  per_side_bps: 5
+
+data_quality:                       # §4.3 / §4.5 資料品質門檻
+  discrepancy_bps: 50               # 跨源日報酬差異門檻（bps）
+  window_days: 30                   # 滾動窗（交易日）
+  window_max_hits: 3                # 窗內差異達此筆數即快照失敗
+  extreme_return: 0.20              # 單日 |r| 極端值門檻
+  max_consecutive_nan: 5            # 連續缺值超過即拒絕
+  total_return_tol_bps: 10          # 總報酬抽查容差（bps）
+
+backtest:
+  start: 2005-01-03                 # §1.1 建議起點
+  initial_nav: 1.0                  # 尺度不變，不影響任何指標
+
+stats:                               # §6.4 績效統計參數
+  bootstrap_mean_block: 21           # stationary bootstrap 平均塊長（交易日）
+  bootstrap_reps: 1000               # 重抽次數
+  bootstrap_alpha: 0.05              # 百分位 CI 雙尾水準
+  absmom_cash_threshold: 0.10        # full 的 σ* 量測納入閾值（absmom 轉現金比例上限）
+  subperiods:                        # 子期間切點（起始年，含）
+    - [2005, 2009]
+    - [2010, 2019]
+    - [2020, 9999]

@@ -1,0 +1,86 @@
+from fastapi.testclient import TestClient
+
+from quantcore.presentation.web.app import create_app
+
+
+def _client(runs_root):
+    return TestClient(create_app(runs_root=runs_root))
+
+
+def test_overview_has_charts_and_metrics_table(runs_root):
+    r = _client(runs_root).get("/overview")
+    assert r.status_code == 200
+    assert "NAV" in r.text
+    assert "回撤" in r.text
+    assert "曝險" in r.text
+    assert "sharpe" in r.text  # 指標表欄
+    assert "plotly" in r.text.lower()  # 圖片段已嵌入
+
+
+def test_overview_backtest_guard_present(runs_root):
+    # backtest run 正常渲染，不誤報「非回測 run」
+    r = _client(runs_root).get("/overview")
+    assert "非回測 run" not in r.text
+
+
+def test_portfolio_has_weight_stack_and_cost(runs_root):
+    r = _client(runs_root).get("/portfolio")
+    assert r.status_code == 200
+    assert "權重堆疊" in r.text
+    assert "換手" in r.text
+    assert "plotly" in r.text.lower()
+
+
+def test_data_quality_shows_manifest_or_missing(runs_root):
+    r = _client(runs_root).get("/data-quality")
+    assert r.status_code == 200
+    assert "資料品質" in r.text
+    # 快照或在本機（顯示 MANIFEST）或只有 hash 進版控（顯示「不在本機」）
+    assert ("不在本機" in r.text) or ("MANIFEST" in r.text)
+
+
+def test_decisions_six_layers(runs_root):
+    r = _client(runs_root).get("/decisions")
+    assert r.status_code == 200
+    for lbl in ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]:
+        assert lbl in r.text
+    assert "目標權重" in r.text
+
+
+def test_garch_page_renders(runs_root):
+    r = _client(runs_root).get("/garch")
+    assert r.status_code == 200
+    assert "GARCH 檢視" in r.text
+    assert "fallback" in r.text.lower()
+
+
+def test_correlation_page_renders(runs_root):
+    r = _client(runs_root).get("/correlation")
+    assert r.status_code == 200
+    assert ("相關矩陣熱圖" in r.text) or ("本次未儲存" in r.text)
+
+
+def test_ablation_page_renders(runs_root):
+    r = _client(runs_root).get("/ablation")
+    assert r.status_code == 200
+    assert ("指標表" in r.text) or ("無消融表" in r.text)
+
+
+def test_price_trades_flagship(runs_root):
+    r = _client(runs_root).get("/price-trades")
+    assert r.status_code == 200
+    assert ("價格與進出場" in r.text) or ("本次未儲存" in r.text)
+
+
+def test_price_trades_page_param_ok(runs_root):
+    r = _client(runs_root).get("/price-trades?page=1")
+    assert r.status_code == 200
+    assert ("第 " in r.text) or ("本次未儲存" in r.text)
+
+
+def test_price_trades_csv_export(runs_root):
+    r = _client(runs_root).get("/price-trades/export.csv")
+    assert r.status_code in (200, 404)
+    if r.status_code == 200:
+        assert "csv" in r.headers["content-type"]
+        assert "attachment" in r.headers.get("content-disposition", "")

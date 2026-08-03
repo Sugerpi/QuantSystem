@@ -1,0 +1,18 @@
+<table class="data-table">
+  <thead><tr><th>job</th><th>狀態</th><th>進度</th><th>提交</th><th>結果</th></tr></thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr>
+      <td class="rowhead">{{ j.label }}</td>
+      <td><span class="badge badge-{{ j.state }}">{{ j.state }}</span></td>
+      <td>{% if j.strategy_total %}{{ j.current_strategy }} {{ j.strategy_index }}/{{ j.strategy_total }}{% elif j.stage %}{{ j.stage }}{% else %}—{% endif %}</td>
+      <td>{{ j.submitted_at }}</td>
+      <td>
+        {% if j.state == "done" and j.run_dir %}<a class="pgbtn" href="/overview?run={{ j.run_dir.split('/')[-1].split('\\')[-1] }}">看 run</a>
+        {% elif j.state == "failed" %}<span class="badge badge-failed" title="{{ j.error }}">失敗</span>{% else %}—{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  {% if not jobs %}<tr><td colspan="5" class="empty">尚無 job。</td></tr>{% endif %}
+  </tbody>
+</table>

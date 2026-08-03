@@ -39,7 +39,7 @@ def test_log_only_decision_records_row_but_no_turnover():
     snap = make_snapshot({"SPY": [100.0 + i for i in range(12)]}, dates)
     cfg = make_cfg(["SPY"], schedule={"selection_interval": 3, "exposure_check_interval": 3})
     clock = EventClock(dates, warmup=2, selection_interval=3, exposure_check_interval=3)
-    nav, weights, decisions = run_strategy(snap, clock, _LogOnlyOnce(cfg), cfg)
+    nav, weights, decisions, _tr = run_strategy(snap, clock, _LogOnlyOnce(cfg), cfg)
 
     # 診斷有落盤（band_blocked=True 的那筆）
     assert len(decisions) == 1
@@ -85,7 +85,7 @@ def test_log_only_does_not_block_subsequent_execute():
     cfg = make_cfg(["SPY"], schedule={"selection_interval": 3, "exposure_check_interval": 3})
     clock = EventClock(dates, warmup=2, selection_interval=3, exposure_check_interval=3)
     # 不應拋 RuntimeError（log-only 未佔用 pending）
-    nav, weights, decisions = run_strategy(snap, clock, _LogOnlyThenExecute(cfg), cfg)
+    nav, weights, decisions, _tr = run_strategy(snap, clock, _LogOnlyThenExecute(cfg), cfg)
     assert len(decisions) == 2
     # 第二筆（execute=True）確實執行 → 有換手；第一筆（log-only）未執行
     assert pd.isna(decisions.iloc[0]["execution_date"])

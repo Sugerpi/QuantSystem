@@ -89,7 +89,7 @@ def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict
 
     result: dict[str, dict] = {}
     for s in strategies:
-        nav_df, _w, _dec = run_strategy(snapshot, clock, s, cfg)
+        nav_df, _w, _dec, _tr = run_strategy(snapshot, clock, s, cfg)
         rate = _daily_rate(snapshot, nav_df["date"])
         result[s.strategy_id] = compute_metrics(
             nav=nav_df["nav"].reset_index(drop=True),
@@ -108,7 +108,7 @@ def _baseline_returns(
     clock, strategies = _build_clock(base_cfg, snapshot, strategy_ids)
     out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for s in strategies:
-        nav_df, _w, _dec = run_strategy(snapshot, clock, s, base_cfg)
+        nav_df, _w, _dec, _tr = run_strategy(snapshot, clock, s, base_cfg)
         rate = _daily_rate(snapshot, nav_df["date"])
         # bootstrap 用 dropna 對齊（n-1 日）：與 comparison 表的 compute_metrics
         # （fillna(0.0), n 日）建構略異，故 bootstrap 的 point 可能與表頭 sharpe

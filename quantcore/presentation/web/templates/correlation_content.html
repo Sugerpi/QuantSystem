@@ -1,0 +1,30 @@
+<h1 class="page-title">相關結構</h1>
+{% if error %}<p class="empty">{{ error }}</p>{% else %}
+<h2 class="section-title">相關矩陣熱圖（{{ strategy }}）</h2>
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <input type="hidden" name="ti" value="{{ ti }}"><input type="hidden" name="tj" value="{{ tj }}">
+  <label class="ctl">決策日
+    <input type="range" name="cidx" min="0" max="{{ dates|length - 1 }}" value="{{ cidx }}" onchange="this.form.submit()">
+  </label>
+  <span class="ident">{{ dates[cidx] }}</span>
+</form>
+{{ heat_fig|safe }}
+
+<h2 class="section-title">資產對相關時間序列</h2>
+<form method="get" class="page-controls">
+  <input type="hidden" name="run" value="{{ ctrl.run or '' }}">
+  <input type="hidden" name="strat" value="{{ ctrl.strategies | join(',') }}">
+  <input type="hidden" name="cidx" value="{{ cidx }}">
+  <label class="ctl">i <select name="ti" onchange="this.form.submit()">{% for t in tickers %}<option value="{{ t }}" {% if t==ti %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <label class="ctl">j <select name="tj" onchange="this.form.submit()">{% for t in tickers %}<option value="{{ t }}" {% if t==tj %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <label class="ctl">疊第二 run
+    <select name="r2" onchange="this.form.submit()">
+      <option value="">（不疊）</option>
+      {% for o in others %}<option value="{{ o }}" {% if o==r2 %}selected{% endif %}>{{ o }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+{{ pair_fig|safe }}
+{% endif %}

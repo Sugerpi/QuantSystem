@@ -54,14 +54,24 @@ def _frame_content_hash(df: pd.DataFrame, sort_cols: list[str]) -> str:
 
 
 def _content_hashes(
-    nav: pd.DataFrame, weights: pd.DataFrame, decisions: pd.DataFrame, metrics: dict
+    nav: pd.DataFrame,
+    weights: pd.DataFrame,
+    decisions: pd.DataFrame,
+    trades: pd.DataFrame,
+    metrics: dict,
 ) -> dict:
-    """四個輸出檔的內容 hash，供 INV-6 以內容（而非 parquet 位元組）驗證可重現性。"""
+    """輸出檔的內容 hash，供 INV-6 以內容驗證可重現性。
+
+    model_details/*（相關矩陣、殘差）為深掘診斷、不進 identity 合約（設計計畫 §設計決定）。
+    """
     return {
         "nav.parquet": _frame_content_hash(nav, ["strategy_id", "date"]),
         "weights.parquet": _frame_content_hash(weights, ["strategy_id", "date", "ticker"]),
         "decisions.parquet": _frame_content_hash(decisions, ["strategy_id", "decision_date"])
         if not decisions.empty
+        else hashlib.sha256(b"").hexdigest(),
+        "trades.parquet": _frame_content_hash(trades, ["strategy_id", "execution_date", "ticker"])
+        if not trades.empty
         else hashlib.sha256(b"").hexdigest(),
         "metrics.json": hashlib.sha256(
             json.dumps(_json_safe(metrics), sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -113,9 +123,13 @@ def write_artifacts(
     nav: pd.DataFrame,
     weights: pd.DataFrame,
     decisions: pd.DataFrame,
+    trades: pd.DataFrame,
+    correlations: pd.DataFrame,
+    residuals: pd.DataFrame,
     metrics: dict,
 ) -> None:
-    """寫出 §7.1 的 Phase 2 子集（無 model_details/——Phase 2 無模型）。
+    """寫出 §7.1 全量 artifacts：nav/weights/decisions/trades + model_details/（有模型
+    診斷資料時才建立，設計文件 §設計決定）。
 
     manifest 三塊（設計文件 §5.2）：identity 為輸入三元組、content_hashes 為輸出
     內容指紋（與 parquet 位元編碼無關）、created_at 為時間戳。INV-6 比對 content_hashes
@@ -128,7 +142,7 @@ def write_artifacts(
         json.dumps(
             {
                 "identity": identity,
-                "content_hashes": _content_hashes(nav, weights, decisions, metrics),
+                "content_hashes": _content_hashes(nav, weights, decisions, trades, metrics),
                 "created_at": created_at,
             },
             indent=2,
@@ -140,6 +154,14 @@ def write_artifacts(
     _write_parquet(nav, run_dir / "nav.parquet")
     _write_parquet(weights, run_dir / "weights.parquet")
     _write_parquet(decisions, run_dir / "decisions.parquet")
+    _write_parquet(trades, run_dir / "trades.parquet")
+    if not correlations.empty or not residuals.empty:
+        md = run_dir / "model_details"
+        md.mkdir(exist_ok=True)
+        if not correlations.empty:
+            _write_parquet(correlations, md / "correlation.parquet")
+        if not residuals.empty:
+            _write_parquet(residuals, md / "residuals.parquet")
     (run_dir / "metrics.json").write_text(
         json.dumps(_json_safe(metrics), indent=2, sort_keys=True, ensure_ascii=False),
         encoding="utf-8",

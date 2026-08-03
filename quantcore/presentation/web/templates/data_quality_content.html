@@ -1,0 +1,17 @@
+<h1 class="page-title">資料品質</h1>
+{% if error %}
+<p class="empty">{{ error }}</p>
+{% else %}
+<h2 class="section-title">快照 MANIFEST</h2>
+<pre class="json-block">{{ manifest_json }}</pre>
+<h2 class="section-title">資料源</h2>
+<pre class="json-block">{{ sources_json }}</pre>
+<h2 class="section-title">跨源裁決 overrides（{{ overrides|length }} 筆）</h2>
+{% if overrides %}
+<pre class="json-block">{{ overrides | tojson(indent=2) }}</pre>
+{% else %}
+<p class="empty">無 overrides。</p>
+{% endif %}
+<h2 class="section-title">選單 tickers</h2>
+<pre class="json-block">{{ tickers_json }}</pre>
+{% endif %}

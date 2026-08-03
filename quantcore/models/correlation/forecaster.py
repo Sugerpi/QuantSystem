@@ -64,3 +64,10 @@ class CorrelationForecaster:
     def last_params(self) -> DccParams | None:
         """供測試/診斷：dcc 回當前 DccParams；ewma 回 None。"""
         return self._params
+
+    def last_fell_back(self) -> bool | None:
+        """dcc 回當前 DccParams.fell_back（(a,b) 是否退回 fixed_ab）；ewma 無 fallback 概念回 None。
+
+        鏡射 VolForecaster.last_fell_back，供決策當下落盤 corr_fell_back（了結 Phase 5a I-1）。
+        """
+        return None if self._params is None else self._params.fell_back
