@@ -11,6 +11,8 @@ snapshots/*
 # 實驗輸出（見規格 §2.1 / §7.1）
 runs/*
 !runs/.gitkeep
+# 每週追蹤自動化的 log 與生成的暫時 run config（scripts/weekly_track.ps1）
+logs/
 jobs/*
 !jobs/.gitkeep
 
