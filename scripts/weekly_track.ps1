@@ -36,9 +36,18 @@ $LogDir = Join-Path $Repo 'logs\weekly'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $Log = Join-Path $LogDir "$Stamp.log"
 
+# PS 5.1 的 Tee-Object 預設把檔案寫成 UTF-16，log 用一般工具讀會變亂碼。
+# 改用這個 filter：以無 BOM UTF-8 逐行 append，同時把該行往下游傳（互動執行仍看得到）。
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+filter TeeUtf8([string]$Path) {
+  $s = if ($null -eq $_) { '' } else { [string]$_ }
+  [System.IO.File]::AppendAllText($Path, $s + "`r`n", $Utf8NoBom)
+  $_
+}
+
 function Log([string]$m) {
   $line = '{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m
-  $line | Tee-Object -FilePath $Log -Append
+  $line | TeeUtf8 $Log
 }
 
 Log '=== QuantCore 每週追蹤開始 ==='
@@ -47,7 +56,7 @@ Log "uv：$Uv"
 # ---- 步驟 1：建立新快照 -----------------------------------------------------
 Log '步驟 1/2：建立新快照（連網抓 20 檔，四源交叉驗證）…'
 & $Uv run python -m quantcore.data.snapshot create --config quantcore\config\default.yaml *>&1 |
-  Tee-Object -FilePath $Log -Append
+  TeeUtf8 $Log
 if ($LASTEXITCODE -ne 0) {
   Log "!! 快照建立失敗（exit $LASTEXITCODE）— 中止，不在舊資料上跑回測。"
   Log '   常見原因：資料源日報酬跨源差異超標（§4.5），或供應商暫時異常。下週會自動再試。'
@@ -74,7 +83,7 @@ Log "run config：$RunCfg"
 # ---- 步驟 2：跑一次全策略回測 ----------------------------------------------
 Log '步驟 2/2：跑回測（全策略，直接呼叫引擎 CLI）…'
 & $Uv run python -m quantcore.experiments.runner --config $RunCfg --out-root runs --label weekly *>&1 |
-  Tee-Object -FilePath $Log -Append
+  TeeUtf8 $Log
 if ($LASTEXITCODE -ne 0) { Log "!! 回測失敗（exit $LASTEXITCODE）。詳見本 log。"; exit 1 }
 
 Log '=== 完成。runs/ 下已有本週結果；dashboard 可開來看。 ==='
