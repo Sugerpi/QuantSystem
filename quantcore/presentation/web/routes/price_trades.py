@@ -22,7 +22,8 @@ def _focus_trades(request: Request):
         return None, None
     tr_strats = sorted(trades["strategy_id"].unique())
     strat = ctrl.focus if ctrl.focus in tr_strats else tr_strats[0]
-    tr = trades[trades["strategy_id"] == strat].sort_values("execution_date")
+    # 降冪：匯出的 CSV 與畫面 blotter 一致，最近的排最上面。
+    tr = trades[trades["strategy_id"] == strat].sort_values("execution_date", ascending=False)
     ftk = request.query_params.get("ftk") or ""
     if ftk:
         tr = tr[tr["ticker"] == ftk]
@@ -91,7 +92,8 @@ def price_trades(request: Request) -> HTMLResponse:
     ]
 
     ftk = request.query_params.get("ftk") or ""
-    blot = tr[tr["ticker"] == ftk] if ftk else tr
+    # blotter 最近的排最上面（第 1 頁即最新 50 筆）；tr 本身仍維持升冪供上方圖表使用。
+    blot = (tr[tr["ticker"] == ftk] if ftk else tr).sort_values("execution_date", ascending=False)
     try:
         page = int(request.query_params.get("page", 0))
     except ValueError:
