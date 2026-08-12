@@ -174,3 +174,43 @@ def test_price_with_trades_line_and_marks():
     assert any("buy" in n for n in names) and any("sell" in n for n in names)
     buy = next(t for t in fig.data if t.name.endswith("buy"))
     assert buy.customdata is not None  # 供點擊跳決策
+
+
+def test_price_with_weight_dual_panel_keeps_customdata():
+    price = pd.Series(
+        [100.0, 101.0, 102.0, 103.0],
+        index=pd.date_range("2020-01-01", periods=4, freq="D"),
+    )
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-02", "2020-01-04"]),
+            "side": ["buy", "sell"],
+            "fill_price": [101.0, 103.0],
+        }
+    )
+    wser = pd.Series(
+        [0.5, 0.6, 0.6, 0.7],
+        index=pd.date_range("2020-01-01", periods=4, freq="D"),
+    )
+    fig = charts.price_with_weight(price, tr, wser, "SPY")
+    names = {t.name for t in fig.data}
+    assert "SPY price" in names
+    assert "SPY w" in names
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert buy.customdata is not None  # 保住點擊跳決策解剖契約
+    wtrace = next(t for t in fig.data if t.name == "SPY w")
+    assert wtrace.yaxis == "y2"  # 權重面積在下列
+
+
+def test_price_with_weight_no_price_uses_fill():
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-02"]),
+            "side": ["buy"],
+            "fill_price": [101.0],
+        }
+    )
+    wser = pd.Series([0.5, 0.6], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    fig = charts.price_with_weight(None, tr, wser, "SPY")
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert list(buy.y) == [101.0]
