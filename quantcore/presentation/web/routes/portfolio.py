@@ -30,7 +30,7 @@ def portfolio(request: Request) -> HTMLResponse:
         strat = ctrl.focus if ctrl.focus in nav_strats else nav_strats[0]
         ctx.update(
             strategy=strat,
-            stack_fig=charts.to_fragment(charts.weight_stack(weights, strat), "pf-stack"),
+            stack_fig=charts.to_fragment(charts.holdings_heatmap(weights, strat), "pf-stack"),
             band_fig=charts.to_fragment(charts.exposure_band(decisions, strat), "pf-band"),
             cost_fig=charts.to_fragment(charts.turnover_cost(nav, strat), "pf-cost"),
         )
