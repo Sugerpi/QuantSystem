@@ -130,6 +130,30 @@ def test_resid_acf_lags():
     assert len(fig.data[0].y) == 10
 
 
+def test_holdings_heatmap_orders_by_mean_weight():
+    fig = charts.holdings_heatmap(_weights_df(), "full")
+    assert len(fig.data) == 1
+    hm = fig.data[0]
+    assert hm.type == "heatmap"
+    assert list(hm.y) == ["SPY", "GLD"]  # 平均權重 0.6 > 0.4 → 排前
+    assert hm.zmin == 0.0
+    assert len(hm.z) == 2 and len(hm.z[0]) == 3  # (n_ticker, n_date)
+
+
+def test_holdings_heatmap_single_ticker_ok():
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=2, freq="D"),
+            "strategy_id": "bh_spy",
+            "ticker": "SPY",
+            "weight": [1.0, 1.0],
+        }
+    )
+    fig = charts.holdings_heatmap(df, "bh_spy")
+    assert fig.data[0].type == "heatmap"
+    assert list(fig.data[0].y) == ["SPY"]
+
+
 def test_price_with_trades_line_and_marks():
     price = pd.Series(
         [100.0, 101.0, 102.0, 103.0],

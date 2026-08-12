@@ -17,6 +17,7 @@ UP = "#26a65b"
 DOWN = "#e0483e"
 BLUE = "#3a6ea5"
 COLORWAY = ["#e8b64a", "#3a6ea5", "#26a65b", "#7a5aa5", "#ff8c1a", "#8a8a82"]
+HEAT_SCALE = [[0.0, "#000000"], [0.15, "#241a08"], [0.5, "#ff8c1a"], [1.0, "#ffe1b0"]]
 
 
 def style_dark(fig: go.Figure) -> go.Figure:
@@ -145,6 +146,35 @@ def heatmap(z, x, y, *, zmin=None, zmax=None, colorscale="Viridis") -> go.Figure
     fig = go.Figure(
         go.Heatmap(z=z, x=list(x), y=list(y), zmin=zmin, zmax=zmax, colorscale=colorscale)
     )
+    return style_dark(fig)
+
+
+def holdings_heatmap(weights: pd.DataFrame, strategy: str) -> go.Figure:
+    """持倉熱圖：每檔一列、時間為橫軸、色深=權重。
+
+    列序按整段平均權重降序（資料驅動，無硬寫 ticker→類別對照）；y 軸反轉使最高者置頂。
+    CASH 依其平均權重自然定位。取代舊 weight_stack 的堆疊面積（多資產下撞色、無直接標籤）。
+    """
+    w = weights[weights["strategy_id"] == strategy]
+    wide = w.pivot_table(
+        index="date", columns="ticker", values="weight", fill_value=0.0
+    ).sort_index()
+    order = list(wide.mean().sort_values(ascending=False).index)
+    wide = wide[order]
+    zmax = float(wide.to_numpy().max()) if wide.size else 1.0
+    fig = go.Figure(
+        go.Heatmap(
+            z=wide.to_numpy().T,
+            x=wide.index,
+            y=order,
+            zmin=0.0,
+            zmax=zmax,
+            colorscale=HEAT_SCALE,
+            colorbar=dict(title="w", outlinewidth=0),
+            hovertemplate="%{y} · %{x|%Y-%m-%d} · w=%{z:.1%}<extra></extra>",
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
     return style_dark(fig)
 
 
