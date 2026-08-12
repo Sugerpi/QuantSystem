@@ -137,7 +137,9 @@ def test_holdings_heatmap_orders_by_mean_weight():
     assert hm.type == "heatmap"
     assert list(hm.y) == ["SPY", "GLD"]  # 平均權重 0.6 > 0.4 → 排前
     assert hm.zmin == 0.0
+    assert hm.zmax == pytest.approx(0.6)  # zmax = 資料最大權重（非硬寫 1.0）
     assert len(hm.z) == 2 and len(hm.z[0]) == 3  # (n_ticker, n_date)
+    assert fig.layout.yaxis.autorange == "reversed"  # 最高權重置頂
 
 
 def test_holdings_heatmap_single_ticker_ok():
