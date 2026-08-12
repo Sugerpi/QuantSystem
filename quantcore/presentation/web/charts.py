@@ -82,20 +82,6 @@ def exposure(decisions: pd.DataFrame, strategies: list[str]) -> go.Figure:
     return style_dark(fig)
 
 
-def weight_stack(weights: pd.DataFrame, strategy: str) -> go.Figure:
-    """權重堆疊面積（單一策略，含現金若有）。"""
-    w = weights[weights["strategy_id"] == strategy]
-    wide = w.pivot_table(
-        index="date", columns="ticker", values="weight", fill_value=0.0
-    ).sort_index()
-    fig = go.Figure()
-    for col in wide.columns:
-        fig.add_trace(
-            go.Scatter(x=wide.index, y=wide[col], name=str(col), stackgroup="w", mode="lines")
-        )
-    return style_dark(fig)
-
-
 def exposure_band(decisions: pd.DataFrame, strategy: str) -> go.Figure:
     """曝險軌跡 + band_blocked 事件標記（單一策略）。"""
     d = decisions[
@@ -211,42 +197,6 @@ def resid_acf(samples: np.ndarray, lags: int = 20) -> go.Figure:
     acf = [float(np.dot(s0[:-i], s0[i:]) / denom) for i in range(1, k + 1)]
     fig = go.Figure(go.Bar(x=list(range(1, k + 1)), y=acf))
     fig.update_layout(xaxis_title="lag")
-    return style_dark(fig)
-
-
-def price_with_trades(price, trades_tk, ticker: str) -> go.Figure:
-    """單一標的 adj_close 折線 + 買賣進出場標記（marker customdata=execution_date ISO）。
-
-    price 為該檔 adj_close Series（index=date）或 None；trades_tk 為該檔交易
-    （execution_date/side/fill_price）。有 price 時標記 y 取當日 adj_close
-    （reindex，缺值 NaN 不拋錯）；否則取 fill_price。customdata 供點擊跳決策解剖。
-    """
-    fig = go.Figure()
-    has_price = price is not None and len(price) > 0
-    if has_price:
-        fig.add_trace(
-            go.Scatter(x=price.index, y=price.to_numpy(), name=f"{ticker} price", mode="lines")
-        )
-    for side, sym, col in (("buy", "triangle-up", UP), ("sell", "triangle-down", DOWN)):
-        ts = trades_tk[trades_tk["side"] == side]
-        if ts.empty:
-            continue
-        y = (
-            price.reindex(ts["execution_date"]).to_numpy()
-            if has_price
-            else ts["fill_price"].to_numpy()
-        )
-        cd = [pd.Timestamp(d).date().isoformat() for d in ts["execution_date"]]
-        fig.add_trace(
-            go.Scatter(
-                x=ts["execution_date"],
-                y=y,
-                mode="markers",
-                name=f"{ticker} {side}",
-                marker=dict(symbol=sym, size=10, color=col),
-                customdata=cd,
-            )
-        )
     return style_dark(fig)
 
 

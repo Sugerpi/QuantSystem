@@ -74,12 +74,6 @@ def test_exposure_plots_applied():
     assert list(fig.data[0].y) == pytest.approx([0.7, 0.75, 0.8])
 
 
-def test_weight_stack_one_trace_per_ticker():
-    fig = charts.weight_stack(_weights_df(), "full")
-    assert {t.name for t in fig.data} == {"SPY", "GLD"}
-    assert all(t.stackgroup == "w" for t in fig.data)
-
-
 def test_exposure_band_marks_blocked():
     fig = charts.exposure_band(_dec_df(), "full")
     names = {t.name for t in fig.data}
@@ -154,26 +148,6 @@ def test_holdings_heatmap_single_ticker_ok():
     fig = charts.holdings_heatmap(df, "bh_spy")
     assert fig.data[0].type == "heatmap"
     assert list(fig.data[0].y) == ["SPY"]
-
-
-def test_price_with_trades_line_and_marks():
-    price = pd.Series(
-        [100.0, 101.0, 102.0, 103.0],
-        index=pd.date_range("2020-01-01", periods=4, freq="D"),
-    )
-    tr = pd.DataFrame(
-        {
-            "execution_date": pd.to_datetime(["2020-01-02", "2020-01-04"]),
-            "side": ["buy", "sell"],
-            "fill_price": [101.0, 103.0],
-        }
-    )
-    fig = charts.price_with_trades(price, tr, "SPY")
-    names = {t.name for t in fig.data}
-    assert "SPY price" in names
-    assert any("buy" in n for n in names) and any("sell" in n for n in names)
-    buy = next(t for t in fig.data if t.name.endswith("buy"))
-    assert buy.customdata is not None  # 供點擊跳決策
 
 
 def test_price_with_weight_dual_panel_keeps_customdata():
