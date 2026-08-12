@@ -1,5 +1,7 @@
 # --- Claude Code 本地個人設定（不進共享版控） ---
 .claude/settings.local.json
+# 視覺陪同（brainstorming）本地暫存
+.superpowers/
 
 # --- 密鑰（切勿進版控） ---
 .env
