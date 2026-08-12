@@ -185,7 +185,7 @@ def test_price_with_weight_dual_panel_keeps_customdata():
         {
             "execution_date": pd.to_datetime(["2020-01-02", "2020-01-04"]),
             "side": ["buy", "sell"],
-            "fill_price": [101.0, 103.0],
+            "fill_price": [999.0, 888.0],  # 刻意異於當日 price，驗證有 price 時取 adj_close
         }
     )
     wser = pd.Series(
@@ -198,6 +198,7 @@ def test_price_with_weight_dual_panel_keeps_customdata():
     assert "SPY w" in names
     buy = next(t for t in fig.data if t.name.endswith("buy"))
     assert buy.customdata is not None  # 保住點擊跳決策解剖契約
+    assert list(buy.y) == [101.0]  # 有 price → 取當日 adj_close（非 fill_price 999）
     wtrace = next(t for t in fig.data if t.name == "SPY w")
     assert wtrace.yaxis == "y2"  # 權重面積在下列
 
@@ -214,3 +215,21 @@ def test_price_with_weight_no_price_uses_fill():
     fig = charts.price_with_weight(None, tr, wser, "SPY")
     buy = next(t for t in fig.data if t.name.endswith("buy"))
     assert list(buy.y) == [101.0]
+
+
+def test_price_with_weight_marker_off_price_index_is_nan_no_crash():
+    # execution_date 落在 price 索引之外 → reindex 得 NaN、不拋錯（docstring 承諾）
+    import math
+
+    price = pd.Series([100.0, 101.0], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-09"]),
+            "side": ["buy"],
+            "fill_price": [50.0],
+        }
+    )
+    wser = pd.Series([0.5, 0.6], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    fig = charts.price_with_weight(price, tr, wser, "SPY")
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert math.isnan(buy.y[0])
