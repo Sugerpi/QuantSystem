@@ -66,6 +66,9 @@ def run_frontier(
     log_bands: tuple[float, ...] = (0.10, 0.15, 0.20, 0.25),
 ) -> pd.DataFrame:
     """跑 absolute/log 兩趟帶寬掃描，回合併前沿表並印各策略支配判定。"""
+    # 函數內 import（有別於本層其他模組的頂層 import）：讓純核心
+    # （pareto_front 等）不必在 module load 時拉進 config/data/backtest 相依鏈，
+    # 也使測試能以 monkeypatch 替換這三個相依而不跑真回測。
     from quantcore.config import load_config
     from quantcore.data.snapshot import load_snapshot
     from quantcore.experiments.ablation import run_ablation

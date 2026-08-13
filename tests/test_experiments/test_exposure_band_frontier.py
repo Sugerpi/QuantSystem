@@ -119,3 +119,48 @@ def test_run_frontier_orchestrates_absolute_then_log(monkeypatch, tmp_path):
     is_full = front["strategy_id"] == "full"
     row = front[is_abs & is_band & is_full].iloc[0]
     assert row["tracking_error"] == pytest.approx(0.06)
+
+
+def test_run_frontier_warns_on_nan_degenerate_cell(monkeypatch, tmp_path, capsys):
+    # 退化格（annualized_vol=NaN）→ tracking_error=NaN：run_frontier 須印警告且不崩。
+    import math
+
+    import quantcore.experiments.exposure_band_frontier as mod
+    from tests.fixtures.synthetic import make_cfg
+
+    cfg = make_cfg(["SPY", "QQQ"], signal={"top_k": 2})
+    monkeypatch.setattr("quantcore.config.load_config", lambda _p: cfg)
+    monkeypatch.setattr("quantcore.data.snapshot.load_snapshot", lambda _s: {"dummy": True})
+
+    def _fake_run_ablation(*, base_cfg, snapshot, strategy_ids, param_grid, out_root, label):
+        run_dir = tmp_path / label
+        run_dir.mkdir()
+        rows = []
+        for sid in strategy_ids:
+            for b in param_grid["risk.exposure_band"]:
+                vol = math.nan if (sid == "full" and b == 0.10) else 0.10 + b
+                rows.append(
+                    {
+                        "cell_label": f"risk.exposure_band={b}",
+                        "strategy_id": sid,
+                        "annualized_turnover": 1.0 + b,
+                        "annualized_vol": vol,
+                        "sharpe": 0.5,
+                    }
+                )
+        pd.DataFrame(rows).to_parquet(run_dir / "comparison.parquet")
+        return run_dir
+
+    monkeypatch.setattr("quantcore.experiments.ablation.run_ablation", _fake_run_ablation)
+
+    front = mod.run_frontier(
+        "dummy.yaml",
+        out_root=str(tmp_path),
+        strategies=("full",),
+        abs_bands=(0.10, 0.16),
+        log_bands=(0.15,),
+    )
+
+    out = capsys.readouterr().out
+    assert "前沿含 NaN" in out  # 警告有印出
+    assert front["tracking_error"].isna().any()  # 退化列確實帶 NaN，未被靜默吞掉
