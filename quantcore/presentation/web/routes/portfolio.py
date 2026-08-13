@@ -1,4 +1,4 @@
-"""頁 5 組合與成本：權重堆疊面積、曝險軌跡+帶事件、換手+累積成本（§11.2）。"""
+"""頁 5 組合與成本：持倉熱圖、曝險軌跡+帶事件、換手+累積成本（§11.2）。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def portfolio(request: Request) -> HTMLResponse:
         strat = ctrl.focus if ctrl.focus in nav_strats else nav_strats[0]
         ctx.update(
             strategy=strat,
-            stack_fig=charts.to_fragment(charts.weight_stack(weights, strat), "pf-stack"),
+            stack_fig=charts.to_fragment(charts.holdings_heatmap(weights, strat), "pf-stack"),
             band_fig=charts.to_fragment(charts.exposure_band(decisions, strat), "pf-band"),
             cost_fig=charts.to_fragment(charts.turnover_cost(nav, strat), "pf-cost"),
         )

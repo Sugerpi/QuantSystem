@@ -2,7 +2,7 @@
 {% if error %}
 <p class="empty">{{ error }}</p>
 {% else %}
-<div class="chart-card"><div class="chart-title">權重堆疊（{{ strategy }}，含現金）</div>{{ stack_fig|safe }}</div>
+<div class="chart-card"><div class="chart-title">持倉熱圖（{{ strategy }}）</div>{{ stack_fig|safe }}</div>
 <div class="chart-card"><div class="chart-title">曝險軌跡與帶事件（{{ strategy }}）</div>{{ band_fig|safe }}</div>
 <div class="chart-card"><div class="chart-title">每次再平衡換手率與累積成本（{{ strategy }}）</div>{{ cost_fig|safe }}</div>
 {% endif %}

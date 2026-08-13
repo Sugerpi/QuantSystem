@@ -74,12 +74,6 @@ def test_exposure_plots_applied():
     assert list(fig.data[0].y) == pytest.approx([0.7, 0.75, 0.8])
 
 
-def test_weight_stack_one_trace_per_ticker():
-    fig = charts.weight_stack(_weights_df(), "full")
-    assert {t.name for t in fig.data} == {"SPY", "GLD"}
-    assert all(t.stackgroup == "w" for t in fig.data)
-
-
 def test_exposure_band_marks_blocked():
     fig = charts.exposure_band(_dec_df(), "full")
     names = {t.name for t in fig.data}
@@ -130,7 +124,33 @@ def test_resid_acf_lags():
     assert len(fig.data[0].y) == 10
 
 
-def test_price_with_trades_line_and_marks():
+def test_holdings_heatmap_orders_by_mean_weight():
+    fig = charts.holdings_heatmap(_weights_df(), "full")
+    assert len(fig.data) == 1
+    hm = fig.data[0]
+    assert hm.type == "heatmap"
+    assert list(hm.y) == ["SPY", "GLD"]  # 平均權重 0.6 > 0.4 → 排前
+    assert hm.zmin == 0.0
+    assert hm.zmax == pytest.approx(0.6)  # zmax = 資料最大權重（非硬寫 1.0）
+    assert len(hm.z) == 2 and len(hm.z[0]) == 3  # (n_ticker, n_date)
+    assert fig.layout.yaxis.autorange == "reversed"  # 最高權重置頂
+
+
+def test_holdings_heatmap_single_ticker_ok():
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=2, freq="D"),
+            "strategy_id": "bh_spy",
+            "ticker": "SPY",
+            "weight": [1.0, 1.0],
+        }
+    )
+    fig = charts.holdings_heatmap(df, "bh_spy")
+    assert fig.data[0].type == "heatmap"
+    assert list(fig.data[0].y) == ["SPY"]
+
+
+def test_price_with_weight_dual_panel_keeps_customdata():
     price = pd.Series(
         [100.0, 101.0, 102.0, 103.0],
         index=pd.date_range("2020-01-01", periods=4, freq="D"),
@@ -139,12 +159,51 @@ def test_price_with_trades_line_and_marks():
         {
             "execution_date": pd.to_datetime(["2020-01-02", "2020-01-04"]),
             "side": ["buy", "sell"],
-            "fill_price": [101.0, 103.0],
+            "fill_price": [999.0, 888.0],  # 刻意異於當日 price，驗證有 price 時取 adj_close
         }
     )
-    fig = charts.price_with_trades(price, tr, "SPY")
+    wser = pd.Series(
+        [0.5, 0.6, 0.6, 0.7],
+        index=pd.date_range("2020-01-01", periods=4, freq="D"),
+    )
+    fig = charts.price_with_weight(price, tr, wser, "SPY")
     names = {t.name for t in fig.data}
     assert "SPY price" in names
-    assert any("buy" in n for n in names) and any("sell" in n for n in names)
+    assert "SPY w" in names
     buy = next(t for t in fig.data if t.name.endswith("buy"))
-    assert buy.customdata is not None  # 供點擊跳決策
+    assert buy.customdata is not None  # 保住點擊跳決策解剖契約
+    assert list(buy.y) == [101.0]  # 有 price → 取當日 adj_close（非 fill_price 999）
+    wtrace = next(t for t in fig.data if t.name == "SPY w")
+    assert wtrace.yaxis == "y2"  # 權重面積在下列
+
+
+def test_price_with_weight_no_price_uses_fill():
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-02"]),
+            "side": ["buy"],
+            "fill_price": [101.0],
+        }
+    )
+    wser = pd.Series([0.5, 0.6], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    fig = charts.price_with_weight(None, tr, wser, "SPY")
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert list(buy.y) == [101.0]
+
+
+def test_price_with_weight_marker_off_price_index_is_nan_no_crash():
+    # execution_date 落在 price 索引之外 → reindex 得 NaN、不拋錯（docstring 承諾）
+    import math
+
+    price = pd.Series([100.0, 101.0], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    tr = pd.DataFrame(
+        {
+            "execution_date": pd.to_datetime(["2020-01-09"]),
+            "side": ["buy"],
+            "fill_price": [50.0],
+        }
+    )
+    wser = pd.Series([0.5, 0.6], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    fig = charts.price_with_weight(price, tr, wser, "SPY")
+    buy = next(t for t in fig.data if t.name.endswith("buy"))
+    assert math.isnan(buy.y[0])

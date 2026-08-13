@@ -23,10 +23,10 @@ def test_overview_backtest_guard_present(runs_root):
     assert "非回測 run" not in r.text
 
 
-def test_portfolio_has_weight_stack_and_cost(runs_root):
+def test_portfolio_has_holdings_heatmap_and_cost(runs_root):
     r = _client(runs_root).get("/portfolio")
     assert r.status_code == 200
-    assert "權重堆疊" in r.text
+    assert "持倉熱圖" in r.text
     assert "換手" in r.text
     assert "plotly" in r.text.lower()
 

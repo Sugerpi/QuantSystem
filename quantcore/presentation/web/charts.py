@@ -8,6 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 BG = "#000000"
 FG = "#d8d8d3"
@@ -17,6 +18,8 @@ UP = "#26a65b"
 DOWN = "#e0483e"
 BLUE = "#3a6ea5"
 COLORWAY = ["#e8b64a", "#3a6ea5", "#26a65b", "#7a5aa5", "#ff8c1a", "#8a8a82"]
+HEAT_SCALE = [[0.0, "#000000"], [0.15, "#241a08"], [0.5, "#ff8c1a"], [1.0, "#ffe1b0"]]
+WEIGHT_PANEL_ROWS = [0.62, 0.38]
 
 
 def style_dark(fig: go.Figure) -> go.Figure:
@@ -79,20 +82,6 @@ def exposure(decisions: pd.DataFrame, strategies: list[str]) -> go.Figure:
     return style_dark(fig)
 
 
-def weight_stack(weights: pd.DataFrame, strategy: str) -> go.Figure:
-    """權重堆疊面積（單一策略，含現金若有）。"""
-    w = weights[weights["strategy_id"] == strategy]
-    wide = w.pivot_table(
-        index="date", columns="ticker", values="weight", fill_value=0.0
-    ).sort_index()
-    fig = go.Figure()
-    for col in wide.columns:
-        fig.add_trace(
-            go.Scatter(x=wide.index, y=wide[col], name=str(col), stackgroup="w", mode="lines")
-        )
-    return style_dark(fig)
-
-
 def exposure_band(decisions: pd.DataFrame, strategy: str) -> go.Figure:
     """曝險軌跡 + band_blocked 事件標記（單一策略）。"""
     d = decisions[
@@ -148,6 +137,35 @@ def heatmap(z, x, y, *, zmin=None, zmax=None, colorscale="Viridis") -> go.Figure
     return style_dark(fig)
 
 
+def holdings_heatmap(weights: pd.DataFrame, strategy: str) -> go.Figure:
+    """持倉熱圖：每檔一列、時間為橫軸、色深=權重。
+
+    列序按整段平均權重降序（資料驅動，無硬寫 ticker→類別對照）；y 軸反轉使最高者置頂。
+    CASH 依其平均權重自然定位。取代舊 weight_stack 的堆疊面積（多資產下撞色、無直接標籤）。
+    """
+    w = weights[weights["strategy_id"] == strategy]
+    wide = w.pivot_table(
+        index="date", columns="ticker", values="weight", fill_value=0.0
+    ).sort_index()
+    order = list(wide.mean().sort_values(ascending=False).index)
+    wide = wide[order]
+    zmax = float(wide.to_numpy().max()) if wide.size else 1.0
+    fig = go.Figure(
+        go.Heatmap(
+            z=wide.to_numpy().T,
+            x=wide.index,
+            y=order,
+            zmin=0.0,
+            zmax=zmax,
+            colorscale=HEAT_SCALE,
+            colorbar=dict(title="w", outlinewidth=0),
+            hovertemplate="%{y} · %{x|%Y-%m-%d} · w=%{z:.1%}<extra></extra>",
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
+    return style_dark(fig)
+
+
 def line_series(named: dict[str, tuple]) -> go.Figure:
     """多條命名折線；named[name] = (x, y)。"""
     fig = go.Figure()
@@ -182,18 +200,27 @@ def resid_acf(samples: np.ndarray, lags: int = 20) -> go.Figure:
     return style_dark(fig)
 
 
-def price_with_trades(price, trades_tk, ticker: str) -> go.Figure:
-    """單一標的 adj_close 折線 + 買賣進出場標記（marker customdata=execution_date ISO）。
+def price_with_weight(price, trades_tk, weight_series, ticker: str) -> go.Figure:
+    """單標的 價格+持倉 雙面板（取代 price_with_trades）。
 
-    price 為該檔 adj_close Series（index=date）或 None；trades_tk 為該檔交易
-    （execution_date/side/fill_price）。有 price 時標記 y 取當日 adj_close
-    （reindex，缺值 NaN 不拋錯）；否則取 fill_price。customdata 供點擊跳決策解剖。
+    上列：adj_close 折線 + 買▲/賣▼ 標記（marker customdata=execution_date ISO，供點擊跳
+    決策解剖——app.js 抓同一 graph div 不需改）。有 price 時標記 y 取當日 adj_close
+    （reindex，缺值 NaN 不拋錯）；price 為 None 時取 fill_price。
+    下列：組合對該檔權重（面積，tozeroy）。兩列共用時間軸。
     """
-    fig = go.Figure()
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=WEIGHT_PANEL_ROWS,
+        vertical_spacing=0.04,
+    )
     has_price = price is not None and len(price) > 0
     if has_price:
         fig.add_trace(
-            go.Scatter(x=price.index, y=price.to_numpy(), name=f"{ticker} price", mode="lines")
+            go.Scatter(x=price.index, y=price.to_numpy(), name=f"{ticker} price", mode="lines"),
+            row=1,
+            col=1,
         )
     for side, sym, col in (("buy", "triangle-up", UP), ("sell", "triangle-down", DOWN)):
         ts = trades_tk[trades_tk["side"] == side]
@@ -213,6 +240,23 @@ def price_with_trades(price, trades_tk, ticker: str) -> go.Figure:
                 name=f"{ticker} {side}",
                 marker=dict(symbol=sym, size=10, color=col),
                 customdata=cd,
-            )
+            ),
+            row=1,
+            col=1,
         )
+    if weight_series is not None and len(weight_series) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=weight_series.index,
+                y=weight_series.to_numpy(),
+                name=f"{ticker} w",
+                mode="lines",
+                line=dict(width=0.5, color=AMBER),
+                fill="tozeroy",
+            ),
+            row=2,
+            col=1,
+        )
+    fig.update_yaxes(title="價格", row=1, col=1)
+    fig.update_yaxes(title="權重", row=2, col=1, rangemode="tozero")
     return style_dark(fig)

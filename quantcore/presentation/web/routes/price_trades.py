@@ -1,4 +1,4 @@
-"""頁 9 價格與交易（旗艦）：走勢+進出場標記、標的持有列表、blotter、持倉堆疊。"""
+"""頁 9 價格與交易（旗艦）：價格+持倉雙面板、標的持有列表、blotter、持倉熱圖。"""
 
 from __future__ import annotations
 
@@ -76,17 +76,19 @@ def price_trades(request: Request) -> HTMLResponse:
     snap_dir = readers.snapshot_dir_for_run(ctrl.run_dir)
     panel = readers.load_adj_close_panel(snap_dir) if snap_dir.exists() else None
     price = panel[tk] if (panel is not None and tk in panel.columns) else None
-    price_fig = charts.to_fragment(
-        charts.price_with_trades(price, tr[tr["ticker"] == tk], tk), "pt-price"
-    )
 
     weights = cache.read(ctrl.run_dir / "weights.parquet", lambda p: readers.load_weights(p.parent))
     w = weights[weights["strategy_id"] == strat]
-    last_w = (
-        w[w["date"] == w["date"].max()].set_index("ticker")["weight"].to_dict()
-        if not w.empty
-        else {}
+    w_wide = w.pivot_table(
+        index="date", columns="ticker", values="weight", fill_value=0.0
+    ).sort_index()
+    weight_tk = w_wide[tk] if tk in w_wide.columns else None
+    price_fig = charts.to_fragment(
+        charts.price_with_weight(price, tr[tr["ticker"] == tk], weight_tk, tk), "pt-price"
     )
+
+    # 只保留當前非零持有（等同舊稀疏 last_w）；未持有標的在清單顯示「—」而非 0.000。
+    last_w = {t: v for t, v in w_wide.iloc[-1].items() if v != 0.0} if not w_wide.empty else {}
     ticker_rows = [
         {"ticker": t, "weight": last_w.get(t)} for t in sorted(set(tickers) | set(last_w))
     ]
@@ -108,7 +110,7 @@ def price_trades(request: Request) -> HTMLResponse:
         tk=tk,
         price_fig=price_fig,
         ticker_rows=ticker_rows,
-        stack_fig=charts.to_fragment(charts.weight_stack(weights, strat), "pt-stack"),
+        stack_fig=charts.to_fragment(charts.holdings_heatmap(weights, strat), "pt-stack"),
         blot_cols=list(tr.columns),
         blot_rows=view.to_dict("records"),
         ftk=ftk,
