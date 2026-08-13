@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 VolModel = Literal["garch_arch", "garch_own", "ewma", "rolling_std"]
 CorrModel = Literal["dcc", "ewma"]
+ExposureBandMode = Literal["absolute", "log"]
 
 
 class _Strict(BaseModel):
@@ -58,6 +59,7 @@ class RiskConfig(_Strict):
     corr_model: CorrModel
     vol_target_annual: float = Field(gt=0)
     exposure_band: float = Field(ge=0, le=1)
+    exposure_band_mode: ExposureBandMode = "absolute"  # §1.7 帶判定空間：absolute | log(相對)
     exposure_min: float = Field(ge=0, le=1)
     vol_window: int = Field(
         gt=0
@@ -76,6 +78,12 @@ class RiskConfig(_Strict):
             raise ValueError(f"risk.dcc_fixed_ab {(a, b)} 含非有限值")
         if a < 0 or b < 0 or a + b >= 1.0:
             raise ValueError(f"risk.dcc_fixed_ab {(a, b)} 須 a≥0,b≥0,a+b<1（DCC 平穩）")
+        return self
+
+    @model_validator(mode="after")
+    def _log_band_requires_positive_e_min(self) -> RiskConfig:
+        if self.exposure_band_mode == "log" and self.exposure_min <= 0.0:
+            raise ValueError("risk.exposure_band_mode='log' 需 exposure_min>0（避免 ln(0)＝−∞）")
         return self
 
 
