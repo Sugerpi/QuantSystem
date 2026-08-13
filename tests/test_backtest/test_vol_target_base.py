@@ -13,6 +13,7 @@ from quantcore.backtest.strategies.vol_target_base import (
     ticker_returns,
 )
 from quantcore.backtest.strategy import DecisionEvent
+from quantcore.portfolio.exposure import target_exposure
 from quantcore.portfolio.weighting import inverse_vol
 from tests.fixtures.synthetic import make_cfg, make_dates, make_snapshot
 
@@ -152,6 +153,31 @@ def test_collect_std_residuals_names_stale_ticker():
     msg = str(excinfo.value)
     assert "B" in msg
     assert "'A'" not in msg  # A 新鮮，不應被點名為 offender
+
+
+def test_exposure_check_uses_log_band_mode():
+    # 接線驗證：config 的 log 模式須流進 target_exposure。
+    # 以決策落盤的 σ̂_p 與 e0 獨立重算 log 帶判定，應與策略內部一致。
+    snap, dates = _snap()
+    cfg = make_cfg(
+        ["A", "B"],
+        risk={"vol_model": "ewma", "garch_window": 100, "exposure_band_mode": "log"},
+        signal={"top_k": 2},
+    )
+    strat = _FixedRisky(cfg, absmom={"A": True, "B": True})
+    strat.decide(make_view(snap, dates[50]), DecisionEvent.SELECTION)
+    e0 = strat._e_current
+    dec = strat.decide(make_view(snap, dates[55]), DecisionEvent.EXPOSURE_CHECK)
+    expected = target_exposure(
+        dec.diagnostics.sigma_p,
+        cfg.risk.vol_target_annual,
+        cfg.risk.exposure_min,
+        cfg.risk.exposure_band,
+        e0,
+        "log",
+    )
+    assert dec.diagnostics.band_blocked == expected.band_blocked
+    assert dec.diagnostics.exposure_applied == pytest.approx(expected.exposure_applied)
 
 
 def test_forecast_selected_returns_sigma_params_fellback_triple():
