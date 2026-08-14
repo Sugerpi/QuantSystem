@@ -73,6 +73,14 @@ def annualized_turnover(total_turnover: float, n_days: int) -> float:
     return float(total_turnover * _DAYS_PER_YEAR / n_days)
 
 
+def annualized_vol(nav: pd.Series) -> float:
+    """實現年化波動 = std(日報酬, ddof=1)·√252（§6.4；vol targeting 追蹤誤差用）。"""
+    r = nav.pct_change().dropna().to_numpy()
+    if len(r) < 2:
+        return float("nan")
+    return float(np.std(r, ddof=1) * np.sqrt(_DAYS_PER_YEAR))
+
+
 def stationary_bootstrap_indices(
     n: int, mean_block: int, n_reps: int, rng: np.random.Generator
 ) -> np.ndarray:
@@ -185,6 +193,7 @@ def compute_metrics(
         "max_drawdown": max_drawdown(nav),
         "calmar": calmar(nav),
         "annualized_turnover": annualized_turnover(total_turnover, n),
+        "annualized_vol": annualized_vol(nav),
         "cost_drag_bps_per_year": float(total_cost / nav.iloc[0] * _BPS / years)
         if years > 0
         else float("nan"),

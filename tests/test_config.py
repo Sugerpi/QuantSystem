@@ -21,6 +21,7 @@ def test_default_yaml_loads_and_validates():
     assert cfg.signal.momentum_skip == 21
     assert cfg.risk.vol_target_annual == 0.10
     assert cfg.risk.vol_model == "garch_arch"
+    assert cfg.risk.exposure_band_mode == "absolute"
     assert cfg.backtest.start == date(2005, 1, 3)
     assert len(cfg.universe.menu) == 20  # DBC 於 Phase 1 移除（§4.5 三源皆不一致）
 
@@ -267,3 +268,33 @@ def test_dcc_refit_interval_zero_is_fixed_mode():
         dcc_qbar_shrink=0.10,
     )
     assert cfg.dcc_refit_interval == 0  # 合法：固定模式
+
+
+def test_exposure_band_mode_defaults_absolute():
+    raw = _valid_dict()
+    raw["risk"].pop("exposure_band_mode", None)  # 未給 → 預設 absolute
+    cfg = QuantConfig.model_validate(raw)
+    assert cfg.risk.exposure_band_mode == "absolute"
+
+
+def test_exposure_band_mode_log_valid_with_positive_e_min():
+    raw = _valid_dict()
+    raw["risk"]["exposure_band_mode"] = "log"
+    raw["risk"]["exposure_min"] = 0.10
+    cfg = QuantConfig.model_validate(raw)
+    assert cfg.risk.exposure_band_mode == "log"
+
+
+def test_log_band_mode_requires_positive_e_min():
+    raw = _valid_dict()
+    raw["risk"]["exposure_band_mode"] = "log"
+    raw["risk"]["exposure_min"] = 0.0
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)
+
+
+def test_unknown_band_mode_rejected():
+    raw = _valid_dict()
+    raw["risk"]["exposure_band_mode"] = "relative"
+    with pytest.raises(ValidationError):
+        QuantConfig.model_validate(raw)

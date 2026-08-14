@@ -65,5 +65,17 @@ def test_compute_metrics_returns_all_keys():
         "cost_drag_bps_per_year",
         "n_days",
         "average_exposure",
+        "annualized_vol",
     }
     assert m["n_days"] == n
+
+
+def test_annualized_vol_matches_std_times_sqrt252():
+    from quantcore.backtest.metrics import annualized_vol
+
+    n = 300
+    rng = np.random.default_rng(0)
+    r = rng.normal(0, 0.01, n)
+    nav = pd.Series(np.cumprod(1 + r), index=pd.RangeIndex(n))
+    daily = nav.pct_change().dropna().to_numpy()
+    assert annualized_vol(nav) == pytest.approx(np.std(daily, ddof=1) * np.sqrt(252))

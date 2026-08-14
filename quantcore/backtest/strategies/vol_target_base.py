@@ -166,6 +166,7 @@ class VolTargetStrategy(Strategy):
             cfg.risk.exposure_min,
             cfg.risk.exposure_band,
             e_current,
+            cfg.risk.exposure_band_mode,
         )
         weights = {
             t: exp.exposure_applied * state.w_risky[t]

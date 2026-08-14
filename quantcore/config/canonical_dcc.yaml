@@ -22,6 +22,7 @@ risk:                               # §1.6 / §5
   vol_target_annual: 0.10           # σ* 年化波動目標
   exposure_band: 0.10               # 曝險更新帶
   exposure_min: 0.10                # E_min
+  exposure_band_mode: absolute      # §1.7 帶判定空間：absolute | log(相對)。default 維持 absolute
   vol_window: 63                    # rolling_std 滾動窗（交易日），Phase 3 placeholder
   ewma_lambda: 0.94                 # §5.3 RiskMetrics EWMA 衰減（也是 GARCH fallback）
   forecast_horizon: 21              # §1.6 Step 1 的 H，對齊 selection_interval
