@@ -26,6 +26,12 @@ def _render(request: Request, ctx: dict) -> HTMLResponse:
     )
 
 
+# GJR 平穩條件係數：對稱條件分布下負向報酬指標 E[I(ε<0)]=0.5。此值必須與引擎端
+# models/volatility/base.py 的 _GJR_NEG_INDICATOR_EXPECTATION 同步；presentation 依架構
+# 規則不 import 引擎（§2.2），故此處為必要的本地複寫，改動時兩處須一起改。
+_GJR_PERSISTENCE_GAMMA_COEF = 0.5
+
+
 def _param_rows(sub: pd.DataFrame) -> list[dict]:
     rows = []
     for _, r in sub.iterrows():
@@ -39,10 +45,21 @@ def _param_rows(sub: pd.DataFrame) -> list[dict]:
                         "date": r["decision_date"],
                         "ticker": t,
                         **p,
-                        "persistence": p["alpha"] + p["beta"] + 0.5 * p.get("gamma", 0.0),
+                        "persistence": p["alpha"]
+                        + p["beta"]
+                        + _GJR_PERSISTENCE_GAMMA_COEF * p.get("gamma", 0.0),
                     }
                 )
     return rows
+
+
+def _param_chart_cols(columns) -> list[str]:
+    """參數軌跡圖的系列欄位。GJR run（含 gamma 欄）多畫 γ，插在 α 後、β 前，
+    呼應參數向量順序 [omega, alpha, gamma, beta, nu]；純 GARCH run 不含 γ。"""
+    cols = ["omega", "alpha", "beta", "nu", "persistence"]
+    if "gamma" in columns:
+        cols.insert(2, "gamma")
+    return cols
 
 
 @router.get("/garch", response_class=HTMLResponse)
@@ -69,10 +86,7 @@ def garch(request: Request) -> HTMLResponse:
         if tk not in tickers:
             tk = tickers[0]
         tp = pt[pt["ticker"] == tk].sort_values("date")
-        cols = ["omega", "alpha", "beta", "nu", "persistence"]
-        if "gamma" in tp.columns:
-            cols.insert(2, "gamma")  # α 之後、β 之前，呼應參數向量順序
-        named = {c: (tp["date"], tp[c]) for c in cols}
+        named = {c: (tp["date"], tp[c]) for c in _param_chart_cols(tp.columns)}
         ctx["param_tickers"] = tickers
         ctx["tk"] = tk
         ctx["param_fig"] = charts.to_fragment(charts.line_series(named), "g-param")
