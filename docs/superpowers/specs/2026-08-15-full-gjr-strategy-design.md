@@ -76,7 +76,22 @@ GJR-GARCH 在條件變異數遞迴中加入非對稱項 γ：
   `[mu, omega, alpha, gamma, beta, nu]`（位置 1..5），標準 GARCH 為
   `[mu, omega, alpha, beta, nu]`（位置 1..4）。GJR 回傳 dict 額外含 `gamma`。
 
-### 5. `backtest/strategies/full_gjr.py`：新策略
+### 5. `presentation/web/routes/garch.py`：GARCH 頁顯示 γ（前端）
+
+GARCH 頁（頁 3）繪製各檔參數軌跡與 persistence。GJR run 多出 γ，須正確顯示：
+
+- `_param_rows` 的 `persistence` 由 `p["alpha"] + p["beta"]` 改為
+  `p["alpha"] + p["beta"] + 0.5 * p.get("gamma", 0.0)`（與後端平穩條件一致；純
+  GARCH run 無 gamma → 0，數值不變）。gamma 值本身透過既有 `**p` 展開自動帶入列。
+- 參數軌跡圖（原 `named` 僅 `omega/alpha/beta/nu/persistence`）：當該 run 的
+  param DataFrame 含 `gamma` 欄（即 GJR run）時，額外加入 `gamma` 系列；純 GARCH
+  run 無此欄則不畫（資料驅動，不需改模板）。
+
+策略下拉：`controls.py` 由 run metadata 動態讀策略清單，`full_gjr` 會自動出現，
+無需改動；預設焦點仍優先 `full`。其餘 dashboard 頁（總覽/曝險/相關/消融）以
+`strategy_id` 泛用處理，新策略自動納入。
+
+### 6. `backtest/strategies/full_gjr.py`：新策略
 
 - `class FullGjr(Full)`，`strategy_id = "full_gjr"`。
 - 覆寫 `__init__`：`super().__init__(cfg)` 後，以 `spec="gjr_garch"` 重建
@@ -97,6 +112,8 @@ GJR-GARCH 在條件變異數遞迴中加入非對稱項 γ：
   fallback EWMA 正常。
 - **`full_gjr` backtest 測試**（比照 `test_full.py`）：策略可跑通、log-only Decision、
   σ̂_i 進 inverse-vol 與 σ̂_p 進曝險皆來自 GJR。
+- **前端測試**（比照 `test_presentation/`）：GJR run 的 GARCH 頁 persistence 正確
+  （含 0.5γ）、γ 系列有出現在參數軌跡；純 GARCH run 回歸不變。
 - **消融證據（CLAUDE.md 硬性規則）**：`full` vs `full_gjr` 在同一 snapshot 的對比
   （績效指標 + 曝險行為差異），證明 GJR 帶來可辨識的變化。走研究輕流程
   （scratchpad 腳本）產出，結論記入 `PROGRESS.md`。
