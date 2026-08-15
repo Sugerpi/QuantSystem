@@ -39,7 +39,7 @@ def _param_rows(sub: pd.DataFrame) -> list[dict]:
                         "date": r["decision_date"],
                         "ticker": t,
                         **p,
-                        "persistence": p["alpha"] + p["beta"],
+                        "persistence": p["alpha"] + p["beta"] + 0.5 * p.get("gamma", 0.0),
                     }
                 )
     return rows
@@ -69,7 +69,10 @@ def garch(request: Request) -> HTMLResponse:
         if tk not in tickers:
             tk = tickers[0]
         tp = pt[pt["ticker"] == tk].sort_values("date")
-        named = {c: (tp["date"], tp[c]) for c in ("omega", "alpha", "beta", "nu", "persistence")}
+        cols = ["omega", "alpha", "beta", "nu", "persistence"]
+        if "gamma" in tp.columns:
+            cols.insert(2, "gamma")  # α 之後、β 之前，呼應參數向量順序
+        named = {c: (tp["date"], tp[c]) for c in cols}
         ctx["param_tickers"] = tickers
         ctx["tk"] = tk
         ctx["param_fig"] = charts.to_fragment(charts.line_series(named), "g-param")
