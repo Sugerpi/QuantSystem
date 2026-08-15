@@ -13,10 +13,13 @@ import pandas as pd
 
 _SCALE = 100.0
 DAYS_PER_YEAR = 252
+# GJR 非對稱項係數：對稱條件分布下負向報酬指標 I(ε<0) 的期望值，
+# 用於平穩條件 α+β+κγ<1（κ=0.5）。純 GARCH γ=0 時退化為 α+β<1。
+_GJR_NEG_INDICATOR_EXPECTATION = 0.5
 
 
 class GarchDegenerateError(RuntimeError):
-    """GARCH 估計退化：不收斂、非平穩（α+β≥1）或參數落邊界致預測非有限。
+    """GARCH 估計退化：不收斂、非平穩（α+β+0.5γ≥1，純 GARCH γ=0）或參數落邊界致預測非有限。
 
     由 fit_volatility 捕捉並退回 EWMA（設計文件 §1.4）。
     """
@@ -28,7 +31,7 @@ class VolatilityModel(ABC):
     fit 收「報酬」序列（非價格）；forecast 回「每步變異數」，已還原縮放。
     """
 
-    #: GARCH 家族設 True 以啟用 α+β<1 檢查；EWMA（IGARCH，α+β=1）設 False。
+    #: GARCH 家族設 True 以啟用 α+β+0.5γ<1 檢查；EWMA（IGARCH，α+β=1）設 False。
     enforce_stationarity: bool = False
     #: fit 所需最小觀測數（子類覆寫）。
     _min_obs: int = 2
@@ -62,7 +65,11 @@ class VolatilityModel(ABC):
         p = self.params
         # GJR 平穩條件 α+β+0.5γ<1（對稱分布下負向指標期望=0.5）；
         # 純 GARCH gamma 預設 0，退化為 α+β<1。
-        persistence = p.get("alpha", 0.0) + p.get("beta", 0.0) + 0.5 * p.get("gamma", 0.0)
+        persistence = (
+            p.get("alpha", 0.0)
+            + p.get("beta", 0.0)
+            + _GJR_NEG_INDICATOR_EXPECTATION * p.get("gamma", 0.0)
+        )
         if persistence >= 1.0:
             raise GarchDegenerateError(f"非平穩：α+β+0.5γ={persistence:.4f} ≥ 1（多步預測會發散）")
 
