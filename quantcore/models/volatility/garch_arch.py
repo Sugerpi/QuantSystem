@@ -60,7 +60,9 @@ class GarchArch(VolatilityModel):
 
     @property
     def arch_params(self) -> np.ndarray:
-        """完整 arch 參數向量 [mu, omega, alpha[1], beta[1], nu]，供 fix() 濾波。"""
+        """完整 arch 參數向量，供 fix() 濾波。標準 GARCH 為
+        [mu, omega, alpha[1], beta[1], nu]；GJR（_o≥1）為
+        [mu, omega, alpha[1], gamma[1], beta[1], nu]。"""
         return np.asarray(self._arch_params, dtype="float64")
 
     @property
