@@ -39,3 +39,12 @@ def test_chart_cols_omits_gamma_for_standard_garch():
     cols = _param_chart_cols(["omega", "alpha", "beta", "nu", "persistence", "ticker"])
     assert cols == ["omega", "alpha", "beta", "nu", "persistence"]
     assert "gamma" not in cols
+
+
+def test_gjr_gamma_coef_matches_engine_constant():
+    # presentation 依 §2.2 不 import 引擎，故 0.5 係數在此本地複寫；測試層不受此限，
+    # 把兩處常數釘在一起，任一漂移即 CI 紅燈（而非靠人讀註解）。
+    from quantcore.models.volatility.base import _GJR_NEG_INDICATOR_EXPECTATION
+    from quantcore.presentation.web.routes.garch import _GJR_PERSISTENCE_GAMMA_COEF
+
+    assert _GJR_PERSISTENCE_GAMMA_COEF == _GJR_NEG_INDICATOR_EXPECTATION
