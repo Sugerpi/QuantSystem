@@ -128,3 +128,27 @@ def test_filter_updates_standardized_residuals_cache():
     fc.filter("SPY", r2)
     resid = fc.last_standardized_residuals("SPY")
     assert resid.index[-1] == r2.index[-1]  # filter 後殘差含最新日
+
+
+def test_gjr_spec_accepted_and_last_params_has_gamma():
+    r = _returns()
+    f = VolForecaster("gjr_garch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    s = f.refit("AAA", r)
+    assert 0.01 < s < 2.0
+    assert f.last_fell_back("AAA") is False
+    lp = f.last_params("AAA")
+    assert lp is not None and "gamma" in lp  # GJR 診斷須含 γ
+    assert {"omega", "alpha", "beta", "nu", "gamma"} <= set(lp)
+
+
+def test_gjr_filter_matches_gjr_filter_forecast():
+    from quantcore.models.volatility.base import annualize_variance_path
+    from quantcore.models.volatility.garch_arch import GjrGarchArch, garch_filter_forecast
+
+    r = _returns()
+    f = VolForecaster("gjr_garch", ewma_lambda=0.94, horizon=21, garch_window=1000)
+    f.refit("AAA", r)
+    got = f.filter("AAA", r)
+    params = GjrGarchArch().fit(r.iloc[-1000:]).arch_params
+    expected = annualize_variance_path(garch_filter_forecast(params, r.iloc[-1000:], 21, o=1))
+    assert got == expected
