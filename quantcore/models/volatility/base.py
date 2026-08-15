@@ -60,9 +60,11 @@ class VolatilityModel(ABC):
 
     def _check_stationarity(self) -> None:
         p = self.params
-        persistence = p.get("alpha", 0.0) + p.get("beta", 0.0)
+        # GJR 平穩條件 α+β+0.5γ<1（對稱分布下負向指標期望=0.5）；
+        # 純 GARCH gamma 預設 0，退化為 α+β<1。
+        persistence = p.get("alpha", 0.0) + p.get("beta", 0.0) + 0.5 * p.get("gamma", 0.0)
         if persistence >= 1.0:
-            raise GarchDegenerateError(f"非平穩：α+β={persistence:.4f} ≥ 1（多步預測會發散）")
+            raise GarchDegenerateError(f"非平穩：α+β+0.5γ={persistence:.4f} ≥ 1（多步預測會發散）")
 
     @property
     @abstractmethod

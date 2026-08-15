@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from quantcore.models.volatility.garch_arch import (
     GarchArch,
@@ -55,3 +56,35 @@ def test_standard_garch_unchanged_length_five():
     m = GarchArch().fit(r)
     assert m.arch_params.shape == (5,)
     assert "gamma" not in m.params
+
+
+def test_stationarity_check_counts_half_gamma():
+    # 直接驗 base 平穩檢查：α+β=0.95 但 α+β+0.5γ≥1 應被擋為 GarchDegenerateError。
+    from quantcore.models.volatility.base import GarchDegenerateError, VolatilityModel
+
+    class _Fake(VolatilityModel):
+        enforce_stationarity = True
+
+        def __init__(self, params):
+            self._p = params
+
+        @property
+        def params(self):
+            return self._p
+
+        @property
+        def standardized_residuals(self):  # pragma: no cover - 未用
+            raise NotImplementedError
+
+        def _estimate(self, scaled_returns):  # pragma: no cover - 未用
+            raise NotImplementedError
+
+        def _forecast_scaled(self, horizon):  # pragma: no cover - 未用
+            raise NotImplementedError
+
+    # α+β=0.95 < 1（舊條件會放行），但 +0.5*0.2=1.05 ≥ 1 → 應擋
+    m = _Fake({"alpha": 0.10, "beta": 0.85, "gamma": 0.20})
+    with pytest.raises(GarchDegenerateError):
+        m._check_stationarity()
+    # 純 GARCH（無 gamma）行為不變：α+β=0.95 放行
+    _Fake({"alpha": 0.10, "beta": 0.85})._check_stationarity()  # 不拋
