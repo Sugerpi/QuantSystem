@@ -1,6 +1,6 @@
 """波動率模型基底（規格 §5.1、INV-4）。
 
-縮放（×100 估計 / ÷100² 還原）與 GARCH 平穩性檢查（α+β<1）全在此完成——
+縮放（×100 估計 / ÷100² 還原）與 GARCH 平穩性檢查（α+β+0.5γ<1，純 GARCH γ=0）全在此完成——
 INV-4 只有這一個地方能被違反。子類只實作 ×100 尺度的估計與預測。
 """
 
@@ -13,10 +13,13 @@ import pandas as pd
 
 _SCALE = 100.0
 DAYS_PER_YEAR = 252
+# GJR 非對稱項係數：對稱條件分布下負向報酬指標 I(ε<0) 的期望值，
+# 用於平穩條件 α+β+κγ<1（κ=0.5）。純 GARCH γ=0 時退化為 α+β<1。
+_GJR_NEG_INDICATOR_EXPECTATION = 0.5
 
 
 class GarchDegenerateError(RuntimeError):
-    """GARCH 估計退化：不收斂、非平穩（α+β≥1）或參數落邊界致預測非有限。
+    """GARCH 估計退化：不收斂、非平穩（α+β+0.5γ≥1，純 GARCH γ=0）或參數落邊界致預測非有限。
 
     由 fit_volatility 捕捉並退回 EWMA（設計文件 §1.4）。
     """
@@ -28,7 +31,7 @@ class VolatilityModel(ABC):
     fit 收「報酬」序列（非價格）；forecast 回「每步變異數」，已還原縮放。
     """
 
-    #: GARCH 家族設 True 以啟用 α+β<1 檢查；EWMA（IGARCH，α+β=1）設 False。
+    #: GARCH 家族設 True 以啟用 α+β+0.5γ<1 檢查；EWMA（IGARCH，α+β=1）設 False。
     enforce_stationarity: bool = False
     #: fit 所需最小觀測數（子類覆寫）。
     _min_obs: int = 2
@@ -60,9 +63,15 @@ class VolatilityModel(ABC):
 
     def _check_stationarity(self) -> None:
         p = self.params
-        persistence = p.get("alpha", 0.0) + p.get("beta", 0.0)
+        # GJR 平穩條件 α+β+0.5γ<1（對稱分布下負向指標期望=0.5）；
+        # 純 GARCH gamma 預設 0，退化為 α+β<1。
+        persistence = (
+            p.get("alpha", 0.0)
+            + p.get("beta", 0.0)
+            + _GJR_NEG_INDICATOR_EXPECTATION * p.get("gamma", 0.0)
+        )
         if persistence >= 1.0:
-            raise GarchDegenerateError(f"非平穩：α+β={persistence:.4f} ≥ 1（多步預測會發散）")
+            raise GarchDegenerateError(f"非平穩：α+β+0.5γ={persistence:.4f} ≥ 1（多步預測會發散）")
 
     @property
     @abstractmethod

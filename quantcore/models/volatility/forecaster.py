@@ -26,6 +26,7 @@ class _CacheEntry:
     kind: str  # 'garch' | 'ewma'
     arch_params: np.ndarray | None
     fell_back: bool
+    arch_o: int = 0  # GARCH 非對稱階數（GJR=1）；濾波與 last_params 取 γ 用
 
 
 class VolForecaster:
@@ -36,8 +37,10 @@ class VolForecaster:
         self._window = garch_window
         self._cache: dict[str, _CacheEntry] = {}
         self._resid: dict[str, pd.Series] = {}
-        if spec not in ("garch_arch", "ewma"):
-            raise ValueError(f"VolForecaster 不支援 vol_model={spec!r}（可用：garch_arch | ewma）")
+        if spec not in ("garch_arch", "gjr_garch", "ewma"):
+            raise ValueError(
+                f"VolForecaster 不支援 vol_model={spec!r}（可用：garch_arch | gjr_garch | ewma）"
+            )
 
     def _tail(self, returns: pd.Series) -> pd.Series:
         return returns.iloc[-self._window :]
@@ -46,7 +49,9 @@ class VolForecaster:
         """選擇日：完整估計（含 fallback），快取，回年化 σ̂。"""
         outcome = fit_volatility(self._spec, self._tail(returns), ewma_lambda=self._ewma_lambda)
         if isinstance(outcome.model, GarchArch):
-            self._cache[ticker] = _CacheEntry("garch", outcome.model.arch_params, outcome.fell_back)
+            self._cache[ticker] = _CacheEntry(
+                "garch", outcome.model.arch_params, outcome.fell_back, outcome.model._o
+            )
         else:
             self._cache[ticker] = _CacheEntry("ewma", None, outcome.fell_back)
         self._resid[ticker] = outcome.model.standardized_residuals
@@ -61,9 +66,9 @@ class VolForecaster:
         if entry.kind == "garch":
             # 快取參數來自成功的 fit（α+β<1、ω 有限），GARCH(1,1) 解析多步變異數因此
             # 恆有限——garch_filter_forecast 的非有限守護在此不可達。
-            self._resid[ticker] = garch_filter_residuals(entry.arch_params, window)
+            self._resid[ticker] = garch_filter_residuals(entry.arch_params, window, o=entry.arch_o)
             return annualize_variance_path(
-                garch_filter_forecast(entry.arch_params, window, self._horizon)
+                garch_filter_forecast(entry.arch_params, window, self._horizon, o=entry.arch_o)
             )
         outcome = fit_volatility("ewma", window, ewma_lambda=self._ewma_lambda)
         self._resid[ticker] = outcome.model.standardized_residuals
@@ -75,11 +80,22 @@ class VolForecaster:
         return self._cache[ticker].fell_back
 
     def last_params(self, ticker: str) -> dict[str, float] | None:
-        """GARCH ticker 回可讀 {omega,alpha,beta,nu}；EWMA/fallback 回 None（供診斷落盤）。"""
+        """GARCH ticker 回 {omega,alpha,beta,nu}（GJR 另含 gamma）；
+        EWMA/fallback 回 None（供診斷落盤）。前置條件：ticker 須已 refit 過。"""
         entry = self._cache[ticker]
         if entry.kind != "garch" or entry.arch_params is None:
             return None
-        p = entry.arch_params  # [mu, omega, alpha[1], beta[1], nu]
+        p = entry.arch_params
+        if entry.arch_o >= 1:
+            # [mu, omega, alpha[1], gamma[1], beta[1], nu]
+            return {
+                "omega": float(p[1]),
+                "alpha": float(p[2]),
+                "gamma": float(p[3]),
+                "beta": float(p[4]),
+                "nu": float(p[5]),
+            }
+        # [mu, omega, alpha[1], beta[1], nu]
         return {
             "omega": float(p[1]),
             "alpha": float(p[2]),

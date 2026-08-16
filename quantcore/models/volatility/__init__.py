@@ -18,7 +18,7 @@ from quantcore.models.volatility.base import (
     annualize_variance_path,
 )
 from quantcore.models.volatility.ewma import Ewma
-from quantcore.models.volatility.garch_arch import GarchArch
+from quantcore.models.volatility.garch_arch import GarchArch, GjrGarchArch
 from quantcore.models.volatility.rolling_std import annualized_vol
 
 
@@ -42,7 +42,7 @@ class FitOutcome:
 
 
 def fit_volatility(spec: str, returns: pd.Series, *, ewma_lambda: float) -> FitOutcome:
-    """依 spec 建模型並 fit。garch_arch 失敗退回 EWMA 並記標記（設計文件 §1.4）。
+    """依 spec 建模型並 fit。garch_arch / gjr_garch 失敗退回 EWMA 並記標記（設計文件 §1.4）。
 
     fallback 契約僅涵蓋 **fit-time** 退化（不收斂 / α+β≥1 / 非有限參數）。
     fit 成功後的 forecast 不在保護傘下——但 fit 已強制 α+β<1 且 ω 有限，
@@ -53,9 +53,14 @@ def fit_volatility(spec: str, returns: pd.Series, *, ewma_lambda: float) -> FitO
             return FitOutcome(GarchArch().fit(returns), False, None)
         except GarchDegenerateError as exc:
             return FitOutcome(Ewma(ewma_lambda).fit(returns), True, str(exc))
+    if spec == "gjr_garch":
+        try:
+            return FitOutcome(GjrGarchArch().fit(returns), False, None)
+        except GarchDegenerateError as exc:
+            return FitOutcome(Ewma(ewma_lambda).fit(returns), True, str(exc))
     if spec == "ewma":
         return FitOutcome(Ewma(ewma_lambda).fit(returns), False, None)
-    raise ValueError(f"未知 vol spec：{spec!r}（可用：garch_arch | ewma）")
+    raise ValueError(f"未知 vol spec：{spec!r}（可用：garch_arch | gjr_garch | ewma）")
 
 
 __all__ = [
@@ -64,6 +69,7 @@ __all__ = [
     "FitOutcome",
     "GarchArch",
     "GarchDegenerateError",
+    "GjrGarchArch",
     "VolatilityModel",
     "annualize_variance_path",
     "annualized_forecast_vol",

@@ -57,3 +57,26 @@ def test_ewma_spec_no_fallback():
 def test_unknown_spec_raises():
     with pytest.raises(ValueError):
         fit_volatility("nope", _good_returns(), ewma_lambda=0.94)
+
+
+def test_gjr_garch_spec_fits_gjr_model():
+    from quantcore.models.volatility.garch_arch import GjrGarchArch
+
+    out = fit_volatility("gjr_garch", _good_returns(), ewma_lambda=0.94)
+    assert isinstance(out.model, GjrGarchArch)
+    assert out.fell_back is False
+    assert "gamma" in out.model.params
+
+
+def test_gjr_garch_spec_falls_back_to_ewma_on_degenerate(monkeypatch):
+    from quantcore.models.volatility import base
+    from quantcore.models.volatility.garch_arch import GjrGarchArch
+
+    def _boom(self, scaled_returns):
+        raise base.GarchDegenerateError("造出的退化")
+
+    monkeypatch.setattr(GjrGarchArch, "_estimate", _boom)
+    out = fit_volatility("gjr_garch", _good_returns(), ewma_lambda=0.94)
+    assert isinstance(out.model, Ewma)
+    assert out.fell_back is True
+    assert "退化" in out.reason
