@@ -118,3 +118,23 @@ def test_permutation_deterministic_under_seed():
     r1 = permutation_test_paired(a, b, rf, metric_sharpe, 100, 21, np.random.default_rng(99))
     r2 = permutation_test_paired(a, b, rf, metric_sharpe, 100, 21, np.random.default_rng(99))
     assert r1 == r2
+
+
+def test_permutation_nan_observed_returns_nan_pvalue():
+    # 零變異但非零均值序列 → sharpe() 分母為 0 且均值非 0 → metric_sharpe 回 nan
+    # （見 quantcore/backtest/metrics.py 的 _ZERO_VAR_TOL 分支）→ observed 非有限
+    # → p_value 應為 nan（非假顯著）
+    a = np.full(300, 0.01)
+    b = np.random.default_rng(5).standard_normal(300) * 0.01
+    rf = np.zeros(300)
+    res = permutation_test_paired(a, b, rf, metric_sharpe, 100, 21, np.random.default_rng(1))
+    assert np.isnan(res["p_value"])
+
+
+def test_block_swap_mask_rejects_bad_args():
+    import pytest
+
+    from quantcore.backtest.significance import _block_swap_mask
+
+    with pytest.raises(ValueError):
+        _block_swap_mask(100, 0, np.random.default_rng(0))

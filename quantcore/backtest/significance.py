@@ -101,6 +101,8 @@ def _block_swap_mask(n: int, mean_block: int, rng) -> np.ndarray:
     尊重自相關（與 stationary bootstrap 一致的塊長概念）；塊起點以機率
     1/mean_block 開新塊，開塊時重擲該塊的 swap 決定。
     """
+    if n < 1 or mean_block < 1:
+        raise ValueError("n/mean_block 皆須 ≥ 1")
     p = 1.0 / mean_block
     mask = np.empty(n, dtype=bool)
     cur = bool(rng.random() < 0.5)
@@ -122,6 +124,8 @@ def permutation_test_paired(a, b, rf, metric_fn, n_perms: int, mean_block: int, 
     b = np.asarray(b, dtype="float64")
     f = np.asarray(rf, dtype="float64")
     observed = float(metric_fn(a, f) - metric_fn(b, f))
+    if not np.isfinite(observed):
+        return {"observed": observed, "p_value": float("nan")}
     n = len(a)
     count = 0
     for _ in range(n_perms):
