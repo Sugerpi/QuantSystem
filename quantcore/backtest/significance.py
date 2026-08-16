@@ -93,3 +93,42 @@ def pbo_cscv(returns_matrix, n_splits: int, sharpe_fn) -> dict:
         lam_le0 += int(lam <= 0.0)
         total += 1
     return {**base, "value": lam_le0 / total, "n_combinations": total}
+
+
+def _block_swap_mask(n: int, mean_block: int, rng) -> np.ndarray:
+    """長度 n 的布林遮罩：以平均塊長 mean_block 分塊，每塊獨立擲幣決定是否對調。
+
+    尊重自相關（與 stationary bootstrap 一致的塊長概念）；塊起點以機率
+    1/mean_block 開新塊，開塊時重擲該塊的 swap 決定。
+    """
+    p = 1.0 / mean_block
+    mask = np.empty(n, dtype=bool)
+    cur = bool(rng.random() < 0.5)
+    mask[0] = cur
+    for t in range(1, n):
+        if rng.random() < p:
+            cur = bool(rng.random() < 0.5)
+        mask[t] = cur
+    return mask
+
+
+def permutation_test_paired(a, b, rf, metric_fn, n_perms: int, mean_block: int, rng) -> dict:
+    """配對區塊符號置換檢定。回 {observed, p_value}。
+
+    H0：兩序列可交換。每次置換以 _block_swap_mask 對調配對，重算 metric 差異建 null；
+    雙尾 p = (#{|null|≥|observed|}+1)/(n_perms+1)。rng 由呼叫端以 cfg.seed 建（INV-6）。
+    """
+    a = np.asarray(a, dtype="float64")
+    b = np.asarray(b, dtype="float64")
+    f = np.asarray(rf, dtype="float64")
+    observed = float(metric_fn(a, f) - metric_fn(b, f))
+    n = len(a)
+    count = 0
+    for _ in range(n_perms):
+        mask = _block_swap_mask(n, mean_block, rng)
+        pa = np.where(mask, b, a)
+        pb = np.where(mask, a, b)
+        diff = metric_fn(pa, f) - metric_fn(pb, f)
+        if np.isfinite(diff) and abs(diff) >= abs(observed):
+            count += 1
+    return {"observed": observed, "p_value": (count + 1) / (n_perms + 1)}

@@ -3,10 +3,12 @@
 import numpy as np
 from scipy.stats import norm
 
+from quantcore.backtest.metrics import metric_sharpe
 from quantcore.backtest.significance import (
     deflated_sharpe_ratio,
     expected_max_sharpe,
     pbo_cscv,
+    permutation_test_paired,
     psr,
 )
 
@@ -87,3 +89,32 @@ def test_pbo_nan_guards():
     assert np.isnan(pbo_cscv(m, n_splits=8, sharpe_fn=_sharpe_col)["value"])  # N<2
     m2 = np.random.default_rng(3).standard_normal((100, 4))
     assert np.isnan(pbo_cscv(m2, n_splits=7, sharpe_fn=_sharpe_col)["value"])  # 奇數 S
+
+
+def test_permutation_identical_series_high_pvalue():
+    r = np.random.default_rng(0).standard_normal(500) * 0.01
+    rf = np.zeros(500)
+    rng = np.random.default_rng(42)
+    res = permutation_test_paired(r, r, rf, metric_sharpe, n_perms=200, mean_block=21, rng=rng)
+    assert abs(res["observed"]) < 1e-12  # 同序列差異為 0
+    assert res["p_value"] > 0.5
+
+
+def test_permutation_strong_diff_low_pvalue():
+    base = np.random.default_rng(1).standard_normal(1000) * 0.01
+    a = base + 0.003  # a 明顯優
+    b = base
+    rf = np.zeros(1000)
+    rng = np.random.default_rng(7)
+    res = permutation_test_paired(a, b, rf, metric_sharpe, n_perms=500, mean_block=21, rng=rng)
+    assert res["observed"] > 0
+    assert res["p_value"] < 0.05
+
+
+def test_permutation_deterministic_under_seed():
+    a = np.random.default_rng(2).standard_normal(300) * 0.01
+    b = np.random.default_rng(3).standard_normal(300) * 0.01
+    rf = np.zeros(300)
+    r1 = permutation_test_paired(a, b, rf, metric_sharpe, 100, 21, np.random.default_rng(99))
+    r2 = permutation_test_paired(a, b, rf, metric_sharpe, 100, 21, np.random.default_rng(99))
+    assert r1 == r2
