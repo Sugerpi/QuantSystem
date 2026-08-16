@@ -196,3 +196,14 @@ def test_ablation_skips_bootstrap_table_when_full_absent(tmp_path):
     cfg, snap = _bootstrap_cfg_and_snap()
     run_dir = run_ablation(cfg, snap, ["mom_ivol", "voltarget_only"], {}, tmp_path, "test")
     assert not (run_dir / "bootstrap.parquet").exists()
+
+
+def test_cell_returns_parquet_written_and_aligned(tmp_path):
+    cfg, snap = _cfg_and_snap()
+    run_dir = run_ablation(
+        cfg, snap, ["full", "mom_ivol"], {"signal.top_k": [3, 5]}, tmp_path, "test"
+    )
+    cr = pd.read_parquet(run_dir / "cell_returns.parquet")
+    assert set(cr.columns) == {"cell_label", "strategy_id", "date", "ret"}
+    lengths = cr.groupby(["cell_label", "strategy_id"]).size().unique()
+    assert len(lengths) == 1
