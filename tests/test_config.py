@@ -298,3 +298,33 @@ def test_unknown_band_mode_rejected():
     raw["risk"]["exposure_band_mode"] = "relative"
     with pytest.raises(ValidationError):
         QuantConfig.model_validate(raw)
+
+
+def test_stats_significance_fields_load():
+    from quantcore.config import load_config
+
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.stats.significance_strategy == "full"
+    assert cfg.stats.psr_benchmark_sr == 0.0
+    assert cfg.stats.pbo_n_splits == 16
+    assert cfg.stats.mc_permutations == 1000
+
+
+def test_pbo_n_splits_must_be_even():
+    import pytest
+    from pydantic import ValidationError
+
+    from quantcore.config.schema import StatsConfig
+
+    with pytest.raises(ValidationError):
+        StatsConfig(
+            bootstrap_mean_block=21,
+            bootstrap_reps=1000,
+            bootstrap_alpha=0.05,
+            absmom_cash_threshold=0.10,
+            subperiods=[(2005, 2009)],
+            significance_strategy="full",
+            psr_benchmark_sr=0.0,
+            pbo_n_splits=15,  # 奇數 → 應拒絕
+            mc_permutations=1000,
+        )

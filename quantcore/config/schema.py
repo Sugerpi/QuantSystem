@@ -128,12 +128,22 @@ class StatsConfig(_Strict):
     bootstrap_alpha: float = Field(gt=0, lt=1)  # 百分位 CI 雙尾水準
     absmom_cash_threshold: float = Field(ge=0, le=1)  # full 的 σ* 量測納入閾值
     subperiods: list[tuple[int, int]] = Field(min_length=1)  # (start_year, end_year) 含
+    significance_strategy: str = Field(min_length=1)  # DSR/PBO 鎖定的策略
+    psr_benchmark_sr: float  # PSR 資訊性 benchmark（每期，非年化）
+    pbo_n_splits: int = Field(ge=2)  # CSCV 塊數 S（偶數）
+    mc_permutations: int = Field(ge=1)  # 置換次數
 
     @model_validator(mode="after")
     def _subperiods_valid(self) -> StatsConfig:
         for start, end in self.subperiods:
             if start > end:
                 raise ValueError(f"子期間 start({start}) > end({end})")
+        return self
+
+    @model_validator(mode="after")
+    def _pbo_splits_even(self) -> StatsConfig:
+        if self.pbo_n_splits % 2 != 0:
+            raise ValueError(f"pbo_n_splits 須為偶數，得到 {self.pbo_n_splits}")
         return self
 
 
