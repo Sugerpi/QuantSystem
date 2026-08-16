@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+from itertools import combinations
+from math import log
+
 import numpy as np
 from scipy.stats import norm
 
@@ -52,3 +55,41 @@ def deflated_sharpe_ratio(
     if not np.isfinite(sr_star):
         return float("nan")
     return psr(sr, n, skew, kurt, sr_benchmark=sr_star)
+
+
+def pbo_cscv(returns_matrix, n_splits: int, sharpe_fn) -> dict:
+    """Probability of Backtest Overfitting via CSCV（Bailey et al. 2017）。
+
+    returns_matrix：T×N（N 個候選配置的日報酬）。
+    T 切 S 塊（S 偶數），列舉 C(S,S/2) 種 IS/OOS 對半組合；每組取 IS 最佳候選，
+    算其 OOS 相對排名 ω 的 logit λ；PBO = λ≤0 的組合比例（越低越不過擬合）。
+    N<2 或 S 為奇數或 S<2 → value=nan。T 不整除 S 時尾端餘列丟棄。
+    """
+    m = np.asarray(returns_matrix, dtype="float64")
+    t, n = m.shape
+    base = {"value": float("nan"), "n_splits": int(n_splits), "n_candidates": int(n)}
+    if n < 2 or n_splits < 2 or n_splits % 2 != 0:
+        return {**base, "n_combinations": 0}
+    block = t // n_splits
+    if block < 1:
+        return {**base, "n_combinations": 0}
+    blocks = [m[i * block : (i + 1) * block] for i in range(n_splits)]  # 尾端餘列丟棄
+    half = n_splits // 2
+    lam_le0 = 0
+    total = 0
+    for is_idx in combinations(range(n_splits), half):
+        oos_idx = [j for j in range(n_splits) if j not in is_idx]
+        is_mat = np.vstack([blocks[j] for j in is_idx])
+        oos_mat = np.vstack([blocks[j] for j in oos_idx])
+        is_perf = np.array([sharpe_fn(is_mat[:, c]) for c in range(n)])
+        oos_perf = np.array([sharpe_fn(oos_mat[:, c]) for c in range(n)])
+        # nan 視為最差，避免 argmax/排名被污染
+        is_perf = np.where(np.isfinite(is_perf), is_perf, -np.inf)
+        oos_perf = np.where(np.isfinite(oos_perf), oos_perf, -np.inf)
+        n_star = int(np.argmax(is_perf))
+        rank = 1 + int((oos_perf < oos_perf[n_star]).sum())  # 1..N
+        omega = rank / (n + 1)  # ∈ (0,1)
+        lam = log(omega / (1.0 - omega))
+        lam_le0 += int(lam <= 0.0)
+        total += 1
+    return {**base, "value": lam_le0 / total, "n_combinations": total}

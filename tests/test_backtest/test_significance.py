@@ -6,6 +6,7 @@ from scipy.stats import norm
 from quantcore.backtest.significance import (
     deflated_sharpe_ratio,
     expected_max_sharpe,
+    pbo_cscv,
     psr,
 )
 
@@ -57,3 +58,32 @@ def test_dsr_below_psr_because_benchmark_deflated():
     base = psr(sr, n, skew=0.0, kurt=3.0, sr_benchmark=0.0)
     d = deflated_sharpe_ratio(sr, n, skew=0.0, kurt=3.0, sr_variance=0.01, n_trials=10)
     assert d < base
+
+
+def _sharpe_col(x: np.ndarray) -> float:
+    sd = x.std(ddof=1)
+    return float(x.mean() / sd) if sd > 0 else float("nan")
+
+
+def test_pbo_pure_noise_averages_near_half():
+    # 純噪音（候選可交換）下 PBO 期望為 0.5；單次抽樣會抖，故對多組獨立矩陣取平均。
+    vals = []
+    for seed in range(50):
+        m = np.random.default_rng(seed).standard_normal((2000, 12))
+        vals.append(pbo_cscv(m, n_splits=8, sharpe_fn=_sharpe_col)["value"])
+    assert 0.4 < float(np.mean(vals)) < 0.6
+
+
+def test_pbo_one_dominant_near_zero():
+    rng = np.random.default_rng(1)
+    m = rng.standard_normal((2000, 8)) * 0.01
+    m[:, 0] += 0.02  # 第 0 欄真實壓倒（穩定高均值）
+    res = pbo_cscv(m, n_splits=8, sharpe_fn=_sharpe_col)
+    assert res["value"] < 0.1  # 真實優勢 → 幾乎不過擬合
+
+
+def test_pbo_nan_guards():
+    m = np.random.default_rng(2).standard_normal((100, 1))
+    assert np.isnan(pbo_cscv(m, n_splits=8, sharpe_fn=_sharpe_col)["value"])  # N<2
+    m2 = np.random.default_rng(3).standard_normal((100, 4))
+    assert np.isnan(pbo_cscv(m2, n_splits=7, sharpe_fn=_sharpe_col)["value"])  # 奇數 S
