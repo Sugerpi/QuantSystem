@@ -93,7 +93,7 @@ JSON `sort_keys=True`、`ensure_ascii=False`，供位元級可重現比對。
 ## 6. 測試（AC：全綠才算數）
 
 `tests/test_backtest/test_significance.py`：
-- PSR 退化解析驗證：skew=0、kurt=3 時 `psr == Φ(sr·√(n−1))`（sr_benchmark=0）。
+- PSR 退化解析驗證：skew=0、kurt=1 時分母=1，`psr == Φ(sr·√(n−1))`（sr_benchmark=0）。（常態 kurt=3 分母為 √(1+0.5·sr²)，不退化。）
 - `expected_max_sharpe` 對小 N（如 N=2、10）手算比對。
 - PBO 合成資料：純噪音矩陣 → PBO ≈ 0.5；單欄真實壓倒其餘 → PBO ≈ 0。
 - permutation：固定 seed 決定性；observed 與 `paired_metric_diff_ci` 的 point 一致。
