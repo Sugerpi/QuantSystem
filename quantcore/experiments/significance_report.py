@@ -30,14 +30,14 @@ from quantcore.data.snapshot import load_snapshot
 _DAYS_PER_YEAR = 252
 
 
-def _per_period_sr(excess: np.ndarray) -> float:
-    sd = excess.std(ddof=1)
-    return float(excess.mean() / sd) if sd > 0 else float("nan")
+def _sharpe_ratio(r: np.ndarray) -> float:
+    """每期（非年化）Sharpe = mean/std(ddof=1)。零變異回 nan。
 
-
-def _sharpe_col(x: np.ndarray) -> float:
-    sd = x.std(ddof=1)
-    return float(x.mean() / sd) if sd > 0 else float("nan")
+    DSR 端餵超額報酬（ret−rf）算每期 SR；PBO 端餵各格原始日報酬作候選排名指標
+    （rf 對各格相同、不影響排名），兩處共用同一定義。
+    """
+    sd = r.std(ddof=1)
+    return float(r.mean() / sd) if sd > 0 else float("nan")
 
 
 def _daily_rf(snapshot: dict, dates: pd.Series) -> np.ndarray:
@@ -56,6 +56,14 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
     comp = pd.read_parquet(run_dir / "comparison.parquet")
     cell_ret = pd.read_parquet(run_dir / "cell_returns.parquet")
 
+    # 目標策略存在性檢查（設計 §4）：config 不反向依賴 backtest.STRATEGIES，
+    # 改對本次 run 的實際策略集驗證——避免誤設策略時靜默產出 nan/空結果。
+    available = set(cell_ret["strategy_id"].unique())
+    if target not in available:
+        raise ValueError(
+            f"significance_strategy={target!r} 不在消融 run 的策略中：{sorted(available)}"
+        )
+
     cells = list(comp["cell_label"].unique())
     n_trials = len(cells)
 
@@ -64,7 +72,7 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
     base = tgt[tgt["cell_label"] == "baseline"].sort_values("date")
     rf = _daily_rf(snapshot, base["date"])
     excess = base["ret"].to_numpy() - rf
-    sr = _per_period_sr(excess)
+    sr = _sharpe_ratio(excess)
     n_days = int(len(excess))
     sk = float(skew(excess))
     ku = float(kurtosis(excess, fisher=False))  # 非超額
@@ -72,7 +80,7 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
     for cl in cells:
         sub = tgt[tgt["cell_label"] == cl].sort_values("date")
         e = sub["ret"].to_numpy() - _daily_rf(snapshot, sub["date"])
-        cell_srs.append(_per_period_sr(e))
+        cell_srs.append(_sharpe_ratio(e))
     sr_var = float(np.nanvar(np.asarray(cell_srs), ddof=1)) if n_trials > 1 else 0.0
     dsr = {
         "strategy": target,
@@ -87,8 +95,10 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
     }
 
     # --- PBO：目標策略各格日報酬矩陣 T×N ---
-    wide = tgt.pivot_table(index="date", columns="cell_label", values="ret").sort_index().dropna()
-    pbo = pbo_cscv(wide.to_numpy(), cfg.stats.pbo_n_splits, _sharpe_col)
+    # 用 pivot（非 pivot_table）：每格每日僅一筆，重複 (date,cell) 應報錯而非靜默平均。
+    # dropna 取各格共同日期（不同 momentum_lookback 使 warmup 起點不同），對齊成矩陣。
+    wide = tgt.pivot(index="date", columns="cell_label", values="ret").sort_index().dropna()
+    pbo = pbo_cscv(wide.to_numpy(), cfg.stats.pbo_n_splits, _sharpe_ratio)
 
     # --- 置換：full vs baseline 格各其他策略 ---
     base_ret = cell_ret[cell_ret["cell_label"] == "baseline"]

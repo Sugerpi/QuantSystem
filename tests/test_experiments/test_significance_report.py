@@ -12,6 +12,7 @@ tests/test_experiments/test_ablation.py 既有的合成快照慣例
 import json
 
 import numpy as np
+import pytest
 
 from quantcore.experiments.ablation import run_ablation
 from quantcore.experiments.significance_report import build_significance_report
@@ -53,6 +54,16 @@ def test_significance_json_schema(tmp_path):
     assert set(data["dsr"]) >= {"sr", "psr", "expected_max_sr", "dsr", "n_days", "skew", "kurt"}
     assert data["pbo"]["n_candidates"] == data["provenance"]["N"]
     assert isinstance(data["permutation"], list) and len(data["permutation"]) >= 1
+
+
+def test_missing_target_strategy_raises(tmp_path):
+    # significance_strategy 指向未在此 run 跑的策略 → 明確報錯，不靜默產出 nan/空結果
+    cfg, snap, run_dir = _make_ablation_run(tmp_path)
+    cfg2 = cfg.model_copy(
+        update={"stats": cfg.stats.model_copy(update={"significance_strategy": "bh_spy"})}
+    )
+    with pytest.raises(ValueError, match="significance_strategy"):
+        build_significance_report(cfg2, snap, run_dir)
 
 
 def test_significance_reproducible(tmp_path):
