@@ -79,3 +79,18 @@ def test_annualized_vol_matches_std_times_sqrt252():
     nav = pd.Series(np.cumprod(1 + r), index=pd.RangeIndex(n))
     daily = nav.pct_change().dropna().to_numpy()
     assert annualized_vol(nav) == pytest.approx(np.std(daily, ddof=1) * np.sqrt(252))
+
+
+def test_metric_max_drawdown_matches_nav_maxdd():
+    import numpy as np
+
+    from quantcore.backtest.metrics import (
+        _nav_from_returns,
+        max_drawdown,
+        metric_max_drawdown,
+    )
+
+    r = np.array([0.1, -0.5, 0.2])  # nav: 1→1.1→0.55→0.66，峰 1.1 谷 0.55
+    got = metric_max_drawdown(r, np.zeros_like(r))
+    assert abs(got - (-0.5)) < 1e-12  # 0.55/1.1 - 1 = -0.5
+    assert got == max_drawdown(_nav_from_returns(r))  # 與 nav 版一致

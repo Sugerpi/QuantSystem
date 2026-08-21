@@ -118,6 +118,11 @@ def metric_calmar(r: np.ndarray, rf: np.ndarray) -> float:
     return calmar(_nav_from_returns(r))
 
 
+def metric_max_drawdown(r: np.ndarray, rf: np.ndarray) -> float:
+    """報酬陣列版 MaxDD（供 significance；rf 未用）。回負值或 0；越接近 0 越好。"""
+    return max_drawdown(_nav_from_returns(r))
+
+
 def _percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
     """雙尾百分位 CI (lo, hi)。剔除非有限後若無樣本則回 (nan, nan)——避免 np.percentile 崩潰。"""
     finite = samples[np.isfinite(samples)]
