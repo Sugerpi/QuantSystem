@@ -467,6 +467,16 @@ class Strategy(ABC):
 - **Block bootstrap CI**（stationary bootstrap，平均 block 長度 21 日，1000 次）取代舊系統的 iid bootstrap——日報酬有自相關，iid 重抽樣的 CI 系統性偏窄。
 - 子期間分析：至少切 2005-2009 / 2010-2019 / 2020- 三段，動量策略的績效高度 regime 依賴，單一全期數字會說謊。
 
+### 6.5 多重檢定校正與顯著性檢定
+
+§6.4 的 block bootstrap CI 只回答「單一比較下優勢站不站得住」。但研究流程會**試很多次**（消融格、七策略、參數掃描），單次 CI 未校正搜尋次數，會系統性高估顯著性。以下三個檢定補這個洞，純函式在 `backtest/significance.py`，編排在 `experiments/significance_report.py`（讀消融 run 產 `significance.json`）。所有隨機性走 `cfg.seed`（INV-6）。
+
+- **Deflated Sharpe Ratio（DSR）**：以「N 次試驗下的期望最大 Sharpe」為 benchmark 的 PSR（Bailey & López de Prado 2014）。**N = 消融格數**（自動計數），benchmark 隨試驗次數與試驗間 Sharpe 橫斷面離散度上調。判讀：DSR > 0.95 才算 Sharpe 在校正搜尋後仍顯著 > 0。**限制**：N 只涵蓋單次消融的格數，未涵蓋跨實驗的累積搜尋；格間 Sharpe 離散度低時校正力弱。
+- **PBO / CSCV**（Bailey, Borwein, López de Prado & Zhu 2017）：以消融格為候選集、鎖定 `full`，用組合對稱交叉驗證量「挑樣本內最佳格在樣本外落到中位數以下的機率」。判讀：PBO < 0.5 才算沒過擬合，越低越好；PBO ≈ 0.5 表示候選格的選擇無可泛化優勢（含「各格統計上無法區分」的情形）。
+- **蒙地卡羅區塊置換檢定**：`full` vs 各對照策略的 Sharpe/Calmar 差異，做區塊符號置換（塊長 = bootstrap 平均塊長，尊重自相關）建 null 分布，回雙尾 p-value。與 block bootstrap CI 用不同假設，兩者一致（CI 排除 0 且 p < 0.05）才踏實。`observed` 為非有限（如零變異 Sharpe、無回撤 Calmar）時回 NaN p 值，不製造假顯著。
+
+**驗收紀律**：§6.3 的「`full` 須優於每個殘缺版」判準，除 block bootstrap CI 外，應同時看置換 p-value（Sharpe 與 Calmar 分開）與 PBO；並明確區分優勢落在哪個指標（Sharpe vs 風險調整後的 MaxDD/Calmar）。正式結論的置換對照應鎖定消融階梯（mom_only → mom_ivol → voltarget_only → full），不混入非殘缺版的基準策略。
+
 ---
 
 ## 7. 實驗框架與可重現性
@@ -520,7 +530,8 @@ backtest:
 一個指令跑完 §6.3 全部七個策略 + 以下參數敏感度：
 
 - `top_k ∈ {3, 5, 8}`、`vol_target ∈ {8%, 10%, 12%}`、`momentum_lookback ∈ {126, 252}`、`cost_bps ∈ {0, 5, 10, 20}`
-- 輸出單一比較表（parquet + 終端摘要）。**紀律**：敏感度表的用途是確認結論對參數擾動穩健，不是挑最好的一格回填 config——後者是過擬合的標準姿勢，報告中必須揭露看過哪些格子。
+- 輸出單一比較表（parquet + 終端摘要）+ 每格每策略日報酬（`cell_returns.parquet`，供 §6.5 的 PBO/DSR/置換消費）。**紀律**：敏感度表的用途是確認結論對參數擾動穩健，不是挑最好的一格回填 config——後者是過擬合的標準姿勢，報告中必須揭露看過哪些格子。
+- 顯著性檢定（§6.5）由 `experiments/significance_report.py` 讀消融 run 目錄產出 `significance.json`（DSR/PBO/置換 p-value + provenance）。
 
 ---
 
