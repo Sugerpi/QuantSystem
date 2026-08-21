@@ -59,3 +59,7 @@ stats:                               # §6.4 績效統計參數
     - [2005, 2009]
     - [2010, 2019]
     - [2020, 9999]
+  significance_strategy: full        # DSR/PBO 鎖定的策略
+  psr_benchmark_sr: 0.0              # PSR 資訊性 benchmark（每期，非年化）
+  pbo_n_splits: 16                   # CSCV 塊數 S（偶數）
+  mc_permutations: 1000             # 蒙地卡羅置換次數

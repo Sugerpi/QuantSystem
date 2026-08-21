@@ -83,22 +83,29 @@ def _daily_rate(snapshot: dict, dates: pd.Series) -> pd.Series:
     )
 
 
-def _evaluate(cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]) -> dict[str, dict]:
-    """跑指定策略，回傳 {strategy_id: metrics dict}。in-memory，不落 run 目錄。"""
+def _evaluate(
+    cfg: QuantConfig, snapshot: dict, strategy_ids: list[str]
+) -> tuple[dict[str, dict], dict[str, pd.DataFrame]]:
+    """跑指定策略，回 ({sid: metrics}, {sid: DataFrame[date, ret]})。in-memory，不落 run 目錄。"""
     clock, strategies = _build_clock(cfg, snapshot, strategy_ids)
 
-    result: dict[str, dict] = {}
+    metrics_out: dict[str, dict] = {}
+    returns_out: dict[str, pd.DataFrame] = {}
     for s in strategies:
         nav_df, _w, _dec, _tr = run_strategy(snapshot, clock, s, cfg)
         rate = _daily_rate(snapshot, nav_df["date"])
-        result[s.strategy_id] = compute_metrics(
+        metrics_out[s.strategy_id] = compute_metrics(
             nav=nav_df["nav"].reset_index(drop=True),
             rate_daily=rate.reset_index(drop=True),
             total_turnover=float(nav_df["turnover"].sum()),
             total_cost=float(nav_df["cost"].sum()),
             weights=_w,
         )
-    return result
+        ret = nav_df["nav"].pct_change().fillna(0.0)
+        returns_out[s.strategy_id] = pd.DataFrame(
+            {"date": nav_df["date"].to_numpy(), "ret": ret.to_numpy()}
+        )
+    return metrics_out, returns_out
 
 
 def _baseline_returns(
@@ -189,7 +196,8 @@ def run_ablation(
         raise ValueError(f"未知策略 {unknown}；可用：{sorted(STRATEGIES)}")
 
     base_raw = base_cfg.model_dump(mode="json")
-    rows: list[dict] = []
+    table_rows: list[dict] = []
+    return_rows: list[pd.DataFrame] = []
     failed_cells: list[dict] = []
     for cell_label, cfg_dict in _build_cells(base_raw, param_grid):
         try:
@@ -198,13 +206,22 @@ def run_ablation(
             failed_cells.append({"cell_label": cell_label, "error": f"{type(e).__name__}: {e}"})
             print(f"[消融] 略過無效格 {cell_label!r}：{type(e).__name__}")
             continue
-        for sid, metrics in _evaluate(cfg, snapshot, strategy_ids).items():
-            rows.append({"cell_label": cell_label, "strategy_id": sid, **metrics})
+        metrics_map, returns_map = _evaluate(cfg, snapshot, strategy_ids)
+        for sid, metrics in metrics_map.items():
+            table_rows.append({"cell_label": cell_label, "strategy_id": sid, **metrics})
+        for sid, rdf in returns_map.items():
+            rdf = rdf.assign(cell_label=cell_label, strategy_id=sid)
+            return_rows.append(rdf[["cell_label", "strategy_id", "date", "ret"]])
 
-    table = pd.DataFrame(rows)
+    table = pd.DataFrame(table_rows)
     run_dir = create_run_dir(out_root, f"{label}_ablation", now)
     table.to_parquet(run_dir / "comparison.parquet", index=False)
     _write_manifest(run_dir, base_cfg, snapshot, strategy_ids, param_grid, failed_cells)
+
+    if return_rows:
+        pd.concat(return_rows, ignore_index=True).to_parquet(
+            run_dir / "cell_returns.parquet", index=False
+        )
 
     bootstrap = _baseline_bootstrap(base_cfg, snapshot, strategy_ids)
     if not bootstrap.empty:
