@@ -63,3 +63,4 @@ stats:                               # §6.4 績效統計參數
   psr_benchmark_sr: 0.0              # PSR 資訊性 benchmark（每期，非年化）
   pbo_n_splits: 16                   # CSCV 塊數 S（偶數）
   mc_permutations: 1000             # 蒙地卡羅置換次數
+  ablation_ladder: [bh_spy, mom_only, mom_ivol, full]   # 巢狀階梯（simple→rich）

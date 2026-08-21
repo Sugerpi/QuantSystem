@@ -35,7 +35,13 @@ def _make_ablation_run(tmp_path):
         signal={"top_k": 2, "momentum_lookback": 20, "momentum_skip": 2},
         universe={"min_history_days": 25},
         schedule={"selection_interval": 5, "exposure_check_interval": 2},
-        stats={"pbo_n_splits": 4, "mc_permutations": 50},
+        stats={
+            "pbo_n_splits": 4,
+            "mc_permutations": 50,
+            # 合成 run 只跑了 ["full", "mom_ivol"]：預設階梯改用這兩者，
+            # 讓不特別覆寫 ablation_ladder 的既有測試也能過。
+            "ablation_ladder": ["mom_ivol", "full"],
+        },
     )
     run_dir = run_ablation(
         cfg, snap, ["full", "mom_ivol"], {"signal.top_k": [3, 5]}, tmp_path, "sig"
@@ -48,7 +54,7 @@ def test_significance_json_schema(tmp_path):
     out = build_significance_report(cfg, snap, run_dir)
     data = json.loads((run_dir / "significance.json").read_text(encoding="utf-8"))
     assert data == out
-    assert set(data) == {"provenance", "dsr", "pbo", "permutation"}
+    assert set(data) == {"provenance", "dsr", "pbo", "permutation", "ladder"}
     assert data["provenance"]["N"] >= 2
     assert data["dsr"]["strategy"] == "full"
     assert set(data["dsr"]) >= {"sr", "psr", "expected_max_sr", "dsr", "n_days", "skew", "kurt"}
@@ -73,3 +79,41 @@ def test_significance_reproducible(tmp_path):
     build_significance_report(cfg, snap, run_dir)
     second = (run_dir / "significance.json").read_bytes()
     assert first == second  # INV-6：同 seed 位元一致
+
+
+def test_significance_ladder_section(tmp_path):
+    cfg, snap, run_dir = _make_ablation_run(tmp_path)
+    # 合成 run 只跑了 ["full", "mom_ivol"]，故階梯改用這兩者（simple→rich）以符合 run 策略集
+    cfg2 = cfg.model_copy(
+        update={"stats": cfg.stats.model_copy(update={"ablation_ladder": ["mom_ivol", "full"]})}
+    )
+    out = build_significance_report(cfg2, snap, run_dir)
+    ladder = out["ladder"]
+    assert isinstance(ladder, list) and len(ladder) == 3  # 1 步 × 3 指標
+    metrics = {row["metric"] for row in ladder}
+    assert metrics == {"sharpe", "calmar", "max_drawdown"}
+    row = ladder[0]
+    assert set(row) >= {
+        "step",
+        "simpler",
+        "richer",
+        "added_layer",
+        "metric",
+        "observed",
+        "ci_lo",
+        "ci_hi",
+        "ci_excludes_zero",
+        "p_value",
+    }
+    assert row["simpler"] == "mom_ivol" and row["richer"] == "full"
+
+
+def test_significance_ladder_missing_strategy_raises(tmp_path):
+    import pytest
+
+    cfg, snap, run_dir = _make_ablation_run(tmp_path)
+    cfg2 = cfg.model_copy(
+        update={"stats": cfg.stats.model_copy(update={"ablation_ladder": ["bh_spy", "full"]})}
+    )
+    with pytest.raises(ValueError, match="ablation_ladder"):
+        build_significance_report(cfg2, snap, run_dir)  # bh_spy 不在此 run
