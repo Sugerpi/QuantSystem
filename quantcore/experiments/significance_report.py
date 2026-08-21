@@ -16,7 +16,13 @@ import numpy as np
 import pandas as pd
 from scipy.stats import kurtosis, skew
 
-from quantcore.backtest.metrics import metric_calmar, metric_sharpe
+from quantcore.backtest.metrics import (
+    metric_calmar,
+    metric_max_drawdown,
+    metric_sharpe,
+    paired_metric_diff_ci,
+    stationary_bootstrap_indices,
+)
 from quantcore.backtest.significance import (
     deflated_sharpe_ratio,
     expected_max_sharpe,
@@ -46,6 +52,71 @@ def _daily_rf(snapshot: dict, dates: pd.Series) -> np.ndarray:
         / 100.0
         / _DAYS_PER_YEAR
     )
+
+
+# 階梯相鄰步 → 該步新增的層（人可讀標籤；非可調參數）
+_LAYER_LABELS = {
+    ("bh_spy", "mom_only"): "橫斷面動量選股",
+    ("mom_only", "mom_ivol"): "inverse-vol 定倉",
+    ("mom_ivol", "full"): "組合波動目標",
+}
+_LADDER_METRICS = (
+    ("sharpe", metric_sharpe),
+    ("calmar", metric_calmar),
+    ("max_drawdown", metric_max_drawdown),
+)
+
+
+def _ladder_analysis(cfg: QuantConfig, snapshot: dict, cell_ret: pd.DataFrame, rng) -> list[dict]:
+    """巢狀階梯相鄰步 × 分指標的配對 CI + 置換 p-value。
+
+    來源同 full-vs-all 置換：baseline cell 的各策略日報酬（同 clock、等長）。
+    MaxDD 為負值、越接近 0 越好；observed = metric(richer) − metric(simpler)，
+    正 diff（MaxDD）= 回撤改善。
+    """
+    ladder = list(cfg.stats.ablation_ladder)
+    base_ret = cell_ret[cell_ret["cell_label"] == "baseline"]
+    available = set(base_ret["strategy_id"].unique())
+    missing = [s for s in ladder if s not in available]
+    if missing:
+        raise ValueError(
+            f"ablation_ladder 策略不在消融 run 中：{missing}（run 有：{sorted(available)}）"
+        )
+
+    series: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for sid in ladder:
+        sub = base_ret[base_ret["strategy_id"] == sid].sort_values("date")
+        series[sid] = (sub["ret"].to_numpy(), _daily_rf(snapshot, sub["date"]))
+
+    rows: list[dict] = []
+    for step in range(len(ladder) - 1):
+        simpler, richer = ladder[step], ladder[step + 1]
+        ra, rf_a = series[richer]
+        rb, _rf_b = series[simpler]
+        idx = stationary_bootstrap_indices(
+            len(ra), cfg.stats.bootstrap_mean_block, cfg.stats.bootstrap_reps, rng
+        )
+        label = _LAYER_LABELS.get((simpler, richer), f"{simpler}→{richer}")
+        for mname, mfn in _LADDER_METRICS:
+            ci = paired_metric_diff_ci(ra, rb, rf_a, mfn, idx, cfg.stats.bootstrap_alpha)
+            perm = permutation_test_paired(
+                ra, rb, rf_a, mfn, cfg.stats.mc_permutations, cfg.stats.bootstrap_mean_block, rng
+            )
+            rows.append(
+                {
+                    "step": step + 1,
+                    "simpler": simpler,
+                    "richer": richer,
+                    "added_layer": label,
+                    "metric": mname,
+                    "observed": ci["point"],
+                    "ci_lo": ci["lo"],
+                    "ci_hi": ci["hi"],
+                    "ci_excludes_zero": ci["excludes_zero"],
+                    "p_value": perm["p_value"],
+                }
+            )
+    return rows
 
 
 def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | Path) -> dict:
@@ -117,6 +188,8 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
             )
             perm.append({"vs": sid, "metric": mname, **res})
 
+    ladder = _ladder_analysis(cfg, snapshot, cell_ret, rng)
+
     report = {
         "provenance": {
             "git_commit": manifest.get("git_commit"),
@@ -127,6 +200,7 @@ def build_significance_report(cfg: QuantConfig, snapshot: dict, run_dir: str | P
         "dsr": dsr,
         "pbo": pbo,
         "permutation": perm,
+        "ladder": ladder,
     }
     (run_dir / "significance.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
