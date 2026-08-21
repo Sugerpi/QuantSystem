@@ -327,4 +327,33 @@ def test_pbo_n_splits_must_be_even():
             psr_benchmark_sr=0.0,
             pbo_n_splits=15,  # 奇數 → 應拒絕
             mc_permutations=1000,
+            ablation_ladder=["bh_spy", "full"],
+        )
+
+
+def test_stats_ablation_ladder_loads():
+    from quantcore.config import load_config
+
+    cfg = load_config("quantcore/config/default.yaml")
+    assert cfg.stats.ablation_ladder == ["bh_spy", "mom_only", "mom_ivol", "full"]
+
+
+def test_ablation_ladder_min_length():
+    import pytest
+    from pydantic import ValidationError
+
+    from quantcore.config.schema import StatsConfig
+
+    with pytest.raises(ValidationError):
+        StatsConfig(
+            bootstrap_mean_block=21,
+            bootstrap_reps=1000,
+            bootstrap_alpha=0.05,
+            absmom_cash_threshold=0.10,
+            subperiods=[(2005, 2009)],
+            significance_strategy="full",
+            psr_benchmark_sr=0.0,
+            pbo_n_splits=16,
+            mc_permutations=1000,
+            ablation_ladder=["full"],  # 少於 2 → 應拒絕
         )

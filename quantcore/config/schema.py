@@ -132,6 +132,7 @@ class StatsConfig(_Strict):
     psr_benchmark_sr: float  # PSR 資訊性 benchmark（每期，非年化）
     pbo_n_splits: int = Field(ge=2)  # CSCV 塊數 S（偶數）
     mc_permutations: int = Field(ge=1)  # 置換次數
+    ablation_ladder: list[str] = Field(min_length=2)  # 巢狀階梯（simple→rich）
 
     @model_validator(mode="after")
     def _subperiods_valid(self) -> StatsConfig:
@@ -144,6 +145,12 @@ class StatsConfig(_Strict):
     def _pbo_splits_even(self) -> StatsConfig:
         if self.pbo_n_splits % 2 != 0:
             raise ValueError(f"pbo_n_splits 須為偶數，得到 {self.pbo_n_splits}")
+        return self
+
+    @model_validator(mode="after")
+    def _ladder_nonempty(self) -> StatsConfig:
+        if any(not s.strip() for s in self.ablation_ladder):
+            raise ValueError("ablation_ladder 元素不可為空字串")
         return self
 
 
